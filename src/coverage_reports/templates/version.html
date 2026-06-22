@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Coverage — {{ version }}{% endblock %}
+{% block body %}
+<h1>Test Coverage Report — Version {{ version }}</h1>
+<div class="subtitle">
+    Repo: {{ repo_name }} · Branch: {{ branch }} · Stale: {{ stale_days }}d · Generated: {{ generated_at }}
+    · <a href="index.html">← Dashboard</a>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab-btn active" onclick="openTab(event, 'summary')">Summary</button>
+    {% for team in teams %}
+    <button class="tab-btn" onclick="openTab(event, 'team-{{ team.name }}')">{{ team.name }} ({{ team.total }})</button>
+    {% endfor %}
+</div>
+
+<!-- ==================== SUMMARY TAB ==================== -->
+<div id="summary" class="tab-content active">
+    <h2>Overall Summary</h2>
+    <table class="summary-table">
+        <tr><td>Total tests in repo</td><td>{{ summary.total_tests }}</td></tr>
+        <tr><td>&nbsp;&nbsp;Automated</td><td>{{ summary.automated }}</td></tr>
+        <tr><td>&nbsp;&nbsp;Unautomated (STD)</td><td>{{ summary.manual }}</td></tr>
+        <tr><td>Executed in RP</td><td>{{ summary.executed }}</td></tr>
+        <tr><td>&nbsp;&nbsp;Passed</td><td>{{ summary.passed }}</td></tr>
+        <tr><td>&nbsp;&nbsp;Failed</td><td>{{ summary.failed }}</td></tr>
+        <tr><td>&nbsp;&nbsp;Skipped</td><td>{{ summary.skipped }}</td></tr>
+        <tr><td>&nbsp;&nbsp;Stale (&gt;{{ stale_days }}d)</td><td>{{ summary.stale }}</td></tr>
+        <tr><td>Never executed</td><td>{{ summary.never_executed }}</td></tr>
+        <tr><td>Quarantined</td><td>{{ summary.quarantined }}</td></tr>
+        <tr><td>Coverage</td><td>{{ "%.1f" | format(summary.coverage_pct) }}%</td></tr>
+    </table>
+
+    {% if teams %}
+    <h2>Per-Team Breakdown</h2>
+    <table class="team-summary-table">
+        <tr>
+            <th>Team</th><th>Total</th><th>Passed</th><th>Failed</th>
+            <th>Quarantined</th><th>Never Executed</th><th>Stale</th><th>Coverage</th>
+        </tr>
+        {% for team in teams %}
+        <tr>
+            <td><a href="#" onclick="openTab(event, 'team-{{ team.name }}'); return false;">{{ team.name }}</a></td>
+            <td>{{ team.total }}</td>
+            <td>{{ team.passed }}</td>
+            <td>{{ team.failed }}</td>
+            <td>{{ team.quarantined }}</td>
+            <td>{{ team.never_executed }}</td>
+            <td>{{ team.stale }}</td>
+            <td>{{ "%.1f" | format(team.coverage_pct) }}%</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td>TOTAL</td>
+            <td>{{ summary.total_tests }}</td>
+            <td>{{ summary.passed }}</td>
+            <td>{{ summary.failed }}</td>
+            <td>{{ summary.quarantined }}</td>
+            <td>{{ summary.never_executed }}</td>
+            <td>{{ summary.stale }}</td>
+            <td>{{ "%.1f" | format(summary.coverage_pct) }}%</td>
+        </tr>
+    </table>
+    {% endif %}
+
+    {% if analysis_records %}
+    <h2>Failure Analysis</h2>
+    <table class="analysis-table">
+        <tr>
+            <th>Team</th><th>Arch</th><th>Type</th><th>Launches</th>
+            <th>Total</th><th>Passed</th><th>Failed</th>
+            <th>Analyzed</th><th>To Investigate</th><th>Analysis %</th>
+            <th>Product Bug</th><th>Auto Bug</th><th>System Issue</th>
+        </tr>
+        {% for record in analysis_records %}
+        <tr{% if record.display_team == 'TOTAL' %} class="total-row"{% endif %}>
+            <td>{{ record.display_team }}</td>
+            <td>{{ record.arch }}</td>
+            <td>{{ record.tier }}</td>
+            <td>{{ record.launches }}</td>
+            <td>{{ record.total }}</td>
+            <td>{{ record.passed }}</td>
+            <td>{{ record.failed }}</td>
+            {% if record.failed > 0 %}
+            {% set rate = (record.analyzed / record.failed * 100) %}
+            <td>{{ record.analyzed }}</td>
+            <td>{{ record.to_investigate }}</td>
+            <td class="{% if rate >= 80 %}rate-high{% elif rate >= 40 %}rate-mid{% else %}rate-low{% endif %}">{{ "%.0f" | format(rate) }}%</td>
+            <td>{{ record.product_bug }}</td>
+            <td>{{ record.automation_bug }}</td>
+            <td>{{ record.system_issue }}</td>
+            {% else %}
+            <td class="rate-na">-</td>
+            <td class="rate-na">-</td>
+            <td class="rate-na">-</td>
+            <td class="rate-na">-</td>
+            <td class="rate-na">-</td>
+            <td class="rate-na">-</td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</div>
+
+<!-- ==================== PER-TEAM TABS ==================== -->
+{% for team in teams %}
+<div id="team-{{ team.name }}" class="tab-content">
+    <div class="team-bar">
+        <b>{{ team.name }}</b> — {{ team.total }} tests, {{ "%.1f" | format(team.coverage_pct) }}% coverage,
+        {{ team.failed }} failed, {{ team.never_executed }} never executed
+    </div>
+
+    {# GATING #}
+    {% if team.gating_items %}
+    <details open class="section-gating">
+        <summary>⚠ GATING ({{ team.gating_items | length }}) <small class="section-desc">— Gating tests with no results or stale</small></summary>
+        <table>
+            <tr><th>Test</th><th>Status</th></tr>
+            {% for item in team.gating_items %}
+            <tr><td class="mono">{{ item.node_id }}</td><td>{{ item.status_label }}</td></tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+
+    {# FAILED #}
+    {% if team.failed_items %}
+    <details open class="section-failed">
+        <summary>FAILED TESTS ({{ team.failed_items | length }}) <small class="section-desc">— Most recent result is FAILED</small></summary>
+        <table>
+            <tr><th>Test</th><th>Bundle</th><th>Date</th><th>Defect</th><th>Comment</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            {% for item in team.failed_items %}
+            <tr>
+                <td class="mono">{{ item.node_id }}</td>
+                <td>{{ item.bundle | default('-') }}</td>
+                <td>{{ item.last_executed | default('-') }}</td>
+                <td>{{ item.defect_type | default('-') }}</td>
+                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ item.defect_comment | default('-') }}</td>
+                {% if rp_url %}
+                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+
+    {# QUARANTINED #}
+    {% if team.quarantined_items %}
+    <details class="section-quarantined">
+        <summary>⏸ QUARANTINED ({{ team.quarantined_items | length }}) <small class="section-desc">— Intentionally skipped due to known bugs</small></summary>
+        <table>
+            <tr><th>Test</th><th>Jira</th><th>Reason</th></tr>
+            {% for item in team.quarantined_items %}
+            <tr>
+                <td class="mono">{{ item.node_id }}</td>
+                <td>{% if item.quarantine_jira %}<a href="https://issues.redhat.com/browse/{{ item.quarantine_jira }}">{{ item.quarantine_jira }}</a>{% else %}-{% endif %}</td>
+                <td>{{ item.quarantine_reason | default('-') }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+
+    {# MANUAL #}
+    {% if team.manual_items %}
+    <details open class="section-manual">
+        <summary>MANUAL TESTS ({{ team.manual_items | length }}) <small class="section-desc">— Unimplemented test designs (__test__ = False)</small></summary>
+        <table>
+            <tr><th>Test</th></tr>
+            {% for item in team.manual_items %}
+            <tr><td class="mono">{{ item.node_id }}</td></tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+
+    {# NEVER EXECUTED #}
+    {% if team.never_executed_items %}
+    <details class="section-never">
+        <summary>NEVER EXECUTED ({{ team.never_executed_items | length }}) <small class="section-desc">— Implemented tests with no RP results</small></summary>
+        <table>
+            <tr><th>Test</th></tr>
+            {% for item in team.never_executed_items %}
+            <tr><td class="mono">{{ item.node_id }}</td></tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+
+    {# STALE #}
+    {% if team.stale_items %}
+    <details class="section-stale">
+        <summary>STALE TESTS ({{ team.stale_items | length }}) <small class="section-desc">— Last execution older than {{ stale_days }} days</small></summary>
+        <table>
+            <tr><th>Test</th><th>Bundle</th><th>Date</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            {% for item in team.stale_items %}
+            <tr>
+                <td class="mono">{{ item.node_id }}</td>
+                <td>{{ item.bundle | default('-') }}</td>
+                <td>{{ item.last_executed | default('-') }}</td>
+                {% if rp_url %}
+                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+
+    {# PASSED #}
+    {% if team.passed_items %}
+    <details class="section-passed">
+        <summary>PASSED TESTS ({{ team.passed_items | length }}) <small class="section-desc">— Most recent result is PASSED</small></summary>
+        <table>
+            <tr><th>Test</th><th>Bundle</th><th>Date</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            {% for item in team.passed_items %}
+            <tr>
+                <td class="mono">{{ item.node_id }}</td>
+                <td>{{ item.bundle | default('-') }}</td>
+                <td>{{ item.last_executed | default('-') }}</td>
+                {% if rp_url %}
+                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+
+    {# SKIPPED #}
+    {% if team.skipped_items %}
+    <details class="section-skipped">
+        <summary>SKIPPED TESTS ({{ team.skipped_items | length }}) <small class="section-desc">— Most recent result is SKIPPED</small></summary>
+        <table>
+            <tr><th>Test</th><th>Bundle</th><th>Date</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            {% for item in team.skipped_items %}
+            <tr>
+                <td class="mono">{{ item.node_id }}</td>
+                <td>{{ item.bundle | default('-') }}</td>
+                <td>{{ item.last_executed | default('-') }}</td>
+                {% if rp_url %}
+                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </table>
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

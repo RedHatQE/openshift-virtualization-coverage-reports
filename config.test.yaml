@@ -1,0 +1,51 @@
+repos:
+  - name: openshift-virtualization-tests
+    url: https://github.com/RedHatQE/openshift-virtualization-tests
+    collector: pytest
+    versions:
+      - branch: cnv-4.22
+        version: "4.22"
+    exclude_teams: [chaos, scale, after_cluster_deploy_sanity]
+
+rp:
+  since_days: 14
+  max_bundles: 5
+  stale_days: 30
+  max_launches: 0
+  arch: [amd64]
+  full: true
+
+team_mapping:
+  VIRT-NODE: Virt
+  VIRT-CLUSTER: Virt
+  NHC: Virt
+  NETWORK: Network
+  NETWORK-OVN-DUAL: Network
+  NETWORK-OVN-IPV6: Network
+  STORAGE: Storage
+  SWAP-HPPCSI: Storage
+  INFRASTRUCTURE: Infrastructure
+  IUO: IUO
+  IUO-INSTALL: IUO
+  CNV-UPGRADE: IUO
+  OBSERVABILITY: Observability
+  OBSERVABILITY-IPV6: Observability
+  SMOKE: Smoke
+  SMOKE-TEST: Smoke
+  SMOKE-OCS-PRODUCTION: Smoke
+
+team_strip_suffixes:
+  - -OVN-OCS-S390X
+  - -HPPCSIBLOCK-S390X
+  - -OCS-S390X
+  - -OVN-DUAL
+  - -OVN-IPV6
+  - -OVN-OCS
+  - -HPPCSIBLOCK
+  - -IPV6
+  - -OCS
+  - -S390X
+
+server:
+  port: 8080
+  output_dir: /tmp/coverage-reports

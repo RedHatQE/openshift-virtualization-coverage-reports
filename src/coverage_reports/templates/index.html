@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Coverage Dashboard{% endblock %}
+{% block body %}
+<div class="header">
+    <div class="container">
+        <h1>OpenShift Virtualization — Test Coverage Dashboard</h1>
+        <div class="header-meta">Last updated: {{ generated_at }}</div>
+    </div>
+</div>
+<div class="container">
+    {% for repo in repos %}
+    <div class="card">
+        <h2>{{ repo.name }}</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Version</th>
+                    <th>Branch</th>
+                    <th>Total Tests</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Never Executed</th>
+                    <th>Quarantined</th>
+                    <th>Coverage</th>
+                    <th>Report</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in repo.versions %}
+                <tr>
+                    <td><strong>{{ ver.version }}</strong></td>
+                    <td><code>{{ ver.branch }}</code></td>
+                    <td class="num">{{ ver.total_tests | default('-') }}</td>
+                    <td class="num">{{ ver.passed | default('-') }}</td>
+                    <td class="num">{{ ver.failed | default('-') }}</td>
+                    <td class="num">{{ ver.never_executed | default('-') }}</td>
+                    <td class="num">{{ ver.quarantined | default('-') }}</td>
+                    <td>
+                        {% if ver.coverage_pct is defined %}
+                        <span class="badge {% if ver.coverage_pct >= 80 %}badge-passed{% elif ver.coverage_pct >= 50 %}badge-stale{% else %}badge-failed{% endif %}">
+                            {{ "%.1f" | format(ver.coverage_pct) }}%
+                        </span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td><a href="{{ ver.report_path }}">View →</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

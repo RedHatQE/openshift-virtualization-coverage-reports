@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: coverage-reports-generate
+  labels:
+    app: coverage-reports
+    component: generator
+spec:
+  # Every 6 hours by default — adjust as needed
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: coverage-reports
+            component: generator
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: generator
+              image: ghcr.io/RedHatQE/openshift-virtualization-coverage-reports:latest
+              args:
+                - "generate"
+                - "--config"
+                - "/config/config.yaml"
+                - "--output-dir"
+                - "/data/reports"
+              envFrom:
+                - secretRef:
+                    name: coverage-reports-secrets
+              volumeMounts:
+                - name: reports-data
+                  mountPath: /data/reports
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 512Mi
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+          volumes:
+            - name: reports-data
+              persistentVolumeClaim:
+                claimName: coverage-reports-data
+            - name: config
+              configMap:
+                name: coverage-reports-config

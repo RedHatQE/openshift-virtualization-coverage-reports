@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Coverage Report{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; color: #333; max-width: 1400px; margin: 0 auto; padding: 1rem; }
+        h1 { margin-bottom: 0.3rem; }
+        h2 { margin: 1.5rem 0 0.5rem; }
+        a { color: #0d6efd; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 0.5rem; }
+        .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em; }
+
+        /* Summary table */
+        .summary-table { border-collapse: collapse; margin-bottom: 1rem; }
+        .summary-table td { padding: 3px 12px; }
+        .summary-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* Team summary table */
+        .team-summary-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+        .team-summary-table th, .team-summary-table td { padding: 6px 10px; border-bottom: 1px solid #ddd; }
+        .team-summary-table th { text-align: left; background: #f5f5f5; }
+        .team-summary-table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+        .team-summary-table tr.total-row { font-weight: 700; border-top: 2px solid #333; }
+
+        /* Analysis table */
+        .analysis-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+        .analysis-table th, .analysis-table td { padding: 6px 10px; border-bottom: 1px solid #ddd; text-align: right; font-variant-numeric: tabular-nums; }
+        .analysis-table th { background: #f5f5f5; font-size: 0.85em; }
+        .analysis-table th:first-child, .analysis-table td:first-child { text-align: left; }
+        .analysis-table th:nth-child(2), .analysis-table td:nth-child(2) { text-align: left; }
+        .analysis-table th:nth-child(3), .analysis-table td:nth-child(3) { text-align: left; }
+        .analysis-table tr.total-row { font-weight: 700; border-top: 2px solid #333; }
+        .rate-high { color: #198754; font-weight: 600; }
+        .rate-mid { color: #b8860b; font-weight: 600; }
+        .rate-low { color: #dc3545; font-weight: 600; }
+        .rate-na { color: #999; }
+
+        /* Tabs */
+        .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid #ddd; margin-bottom: 1rem; }
+        .tab-btn { padding: 8px 16px; border: 1px solid #ddd; border-bottom: none; border-radius: 4px 4px 0 0; background: #f0f0f0; cursor: pointer; font-size: 0.9rem; font-weight: 500; }
+        .tab-btn:hover { background: #e0e0e0; }
+        .tab-btn.active { background: white; border-bottom: 2px solid white; margin-bottom: -2px; font-weight: 700; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Collapsible sections */
+        details { margin-bottom: 0.8rem; border: 1px solid #ddd; border-radius: 4px; }
+        summary { padding: 8px 12px; cursor: pointer; font-weight: 600; font-size: 0.95rem; border-radius: 4px; }
+        summary:hover { opacity: 0.85; }
+        details[open] summary { border-bottom: 1px solid #ddd; border-radius: 4px 4px 0 0; }
+        details table { width: 100%; }
+        details th, details td { padding: 4px 10px; border-bottom: 1px solid #eee; font-size: 0.85em; }
+        details th { background: #fafafa; text-align: left; }
+        .section-gating summary { background: #fff3cd; color: #856404; }
+        .section-failed summary { background: #f8d7da; color: #721c24; }
+        .section-stale summary { background: #fff3cd; color: #856404; }
+        .section-never summary { background: #e9ecef; color: #495057; }
+        .section-passed summary { background: #d4edda; color: #155724; }
+        .section-skipped summary { background: #cff4fc; color: #055160; }
+        .section-quarantined summary { background: #e8d5f5; color: #5b2d8e; }
+        .section-manual summary { background: #fde8cd; color: #7c4a03; }
+        .section-desc { font-weight: normal; color: #666; font-size: 0.85em; }
+
+        /* Team bar */
+        .team-bar { font-size: 1rem; color: #555; margin-bottom: 1rem; padding: 8px 12px; background: #f0f0f0; border-radius: 4px; }
+
+        /* Defect groups */
+        .defect-group { font-weight: 600; padding: 4px 10px; margin-top: 0.5rem; }
+
+        /* Gate badge */
+        .badge-gate { display: inline-block; padding: 6px 18px; border-radius: 4px; font-weight: bold; font-size: 1.2rem; margin: 0.5rem 0 1.5rem; }
+        .badge-pass { background: #198754; color: white; }
+        .badge-fail { background: #dc3545; color: white; }
+
+        /* Footer */
+        .footer { color: #999; font-size: 0.8rem; margin-top: 2rem; border-top: 1px solid #ddd; padding-top: 0.5rem; text-align: center; }
+
+        /* RP log link */
+        .rp-link { text-decoration: none; }
+    </style>
+    <script>
+        function openTab(evt, tabName) {
+            document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            document.getElementById(tabName).classList.add('active');
+            evt.currentTarget.classList.add('active');
+        }
+    </script>
+</head>
+<body>
+{% block body %}{% endblock %}
+<div class="footer">Generated {{ generated_at }} · OpenShift Virtualization Coverage Reports</div>
+</body>
+</html>

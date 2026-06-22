@@ -1,0 +1,58 @@
+# OpenShift Virtualization Coverage Reports — Example Configuration
+#
+# Copy to config.yaml and adjust for your environment.
+# Secrets (RP_URL, RP_PROJECT, RP_TOKEN, GIT_TOKEN) come from environment variables.
+
+repos:
+  - name: openshift-virtualization-tests
+    url: https://github.com/RedHatQE/openshift-virtualization-tests
+    collector: pytest
+    versions:
+      - branch: cnv-4.22
+        version: "4.22"
+      - branch: main
+        version: "4.99"
+    exclude_teams: [chaos, scale, after_cluster_deploy_sanity]
+
+rp:
+  since_days: 14
+  max_bundles: 5
+  stale_days: 30
+  max_launches: 0
+  arch: [amd64, s390x]
+  full: true
+
+team_mapping:
+  VIRT-NODE: Virt
+  VIRT-CLUSTER: Virt
+  NHC: Virt
+  NETWORK: Network
+  NETWORK-OVN-DUAL: Network
+  NETWORK-OVN-IPV6: Network
+  STORAGE: Storage
+  SWAP-HPPCSI: Storage
+  INFRASTRUCTURE: Infrastructure
+  IUO: IUO
+  IUO-INSTALL: IUO
+  CNV-UPGRADE: IUO
+  OBSERVABILITY: Observability
+  OBSERVABILITY-IPV6: Observability
+  SMOKE: Smoke
+  SMOKE-TEST: Smoke
+  SMOKE-OCS-PRODUCTION: Smoke
+
+team_strip_suffixes:
+  - -OVN-OCS-S390X
+  - -HPPCSIBLOCK-S390X
+  - -OCS-S390X
+  - -OVN-DUAL
+  - -OVN-IPV6
+  - -OVN-OCS
+  - -HPPCSIBLOCK
+  - -IPV6
+  - -OCS
+  - -S390X
+
+server:
+  port: 8080
+  output_dir: /data/reports
