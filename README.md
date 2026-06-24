@@ -11,8 +11,6 @@ This tool:
 4. Generates static HTML coverage reports
 5. Serves reports via a built-in HTTP server
 
-Deployed as a Kubernetes CronJob (generate) + Deployment (serve), sharing a PersistentVolume.
-
 ## Quickstart
 
 ### Prerequisites
@@ -122,24 +120,6 @@ Start HTTP server to serve generated reports.
 |------|---------|-------------|
 | `--port` | from config/8080 | Server port |
 | `--dir` | from config | Directory to serve |
-
-## Deployment (Kubernetes)
-
-The tool ships as a single container image with two commands:
-- `generate` — run as a CronJob (default: every 6 hours)
-- `serve` — run as a Deployment
-
-Both share a PersistentVolumeClaim for report storage.
-
-```bash
-# Apply manifests
-kubectl apply -f deploy/pvc.yaml
-kubectl apply -f deploy/secret.yaml   # create from secret.yaml.example
-kubectl apply -f deploy/deployment.yaml
-kubectl apply -f deploy/cronjob.yaml
-```
-
-See `deploy/` for Kubernetes manifests.
 
 ## Architecture
 
