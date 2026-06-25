@@ -74,6 +74,63 @@ uv run coverage-reports generate --config config.yaml --output-dir ./my-reports
 uv run coverage-reports serve --dir ./reports --port 8080
 ```
 
+## Docker
+
+### Build
+
+```bash
+docker build -t coverage-reports .
+```
+
+### Run
+
+#### Generate Reports
+
+```bash
+docker run --rm \
+  -e RP_URL="https://reportportal.example.com" \
+  -e RP_PROJECT="your-project" \
+  -e RP_TOKEN="your-api-token" \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v $(pwd)/reports:/data/reports \
+  coverage-reports \
+  uv run --no-sync coverage-reports generate --config config.yaml
+```
+
+> Add `-e GIT_TOKEN="..."` if accessing private repositories.
+
+#### Serve Reports
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v $(pwd)/reports:/data/reports:ro \
+  coverage-reports
+```
+
+The default command serves reports on port 8080. Mount your generated reports directory to `/data/reports`.
+
+#### Generate and Serve
+
+```bash
+# Generate reports first
+docker run --rm \
+  -e RP_URL="$RP_URL" \
+  -e RP_PROJECT="$RP_PROJECT" \
+  -e RP_TOKEN="$RP_TOKEN" \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v $(pwd)/reports:/data/reports \
+  coverage-reports \
+  uv run --no-sync coverage-reports generate --config config.yaml
+
+# Then serve them
+docker run --rm -d -p 8080:8080 \
+  --name coverage-server \
+  -v $(pwd)/reports:/data/reports:ro \
+  coverage-reports
+```
+
+To stop the server: `docker stop coverage-server`
+
 ## Config Reference
 
 See `config.example.yaml` for the full structure. Key sections:
