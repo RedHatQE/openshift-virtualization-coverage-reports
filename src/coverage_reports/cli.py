@@ -163,6 +163,7 @@ def generate(
                     analysis_records=all_analysis if all_analysis else None,
                     rp_url=config.rp.base_url,
                     rp_project=config.rp.project,
+                    team_aliases=config.team_aliases,
                 )
                 version_htmls[ver_data.report_filename] = html_content
                 repo_versions[repo_config.name].append(ver_data)

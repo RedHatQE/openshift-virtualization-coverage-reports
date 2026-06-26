@@ -53,6 +53,10 @@ team_strip_suffixes:
   - -OCS
   - -S390X
 
+team_aliases:
+  observability: install_upgrade_operators
+  data_protection: storage
+
 server:
   port: 8080
   output_dir: /data/reports

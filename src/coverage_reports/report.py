@@ -304,6 +304,7 @@ def render_version_report(
     analysis_records: list[LaunchAnalysisRecord] | None = None,
     rp_url: str = "",
     rp_project: str = "",
+    team_aliases: dict[str, str] | None = None,
 ) -> tuple[str, VersionReportData]:
     """Render an HTML report for a single version.
 
@@ -317,6 +318,7 @@ def render_version_report(
         analysis_records: Optional failure analysis records.
         rp_url: RP base URL for log links.
         rp_project: RP project name for log links.
+        team_aliases: Optional mapping of directory team names to target team names.
 
     Returns:
         Tuple of (html_content, version_summary_data).
@@ -330,6 +332,8 @@ def render_version_report(
     tests_by_team: dict[str, list[TestInfo]] = {}
     for test in tests:
         team = test.team or _get_team_from_node_id(node_id=test.node_id)
+        if team_aliases and team in team_aliases:
+            team = team_aliases[team]
         tests_by_team.setdefault(team, []).append(test)
 
     team_data_list: list[TeamReportData] = []
@@ -422,10 +426,14 @@ def render_version_report(
     manual_by_team: dict[str, list[dict[str, Any]]] = {}
     for item in all_gating:
         team = _get_team_from_node_id(node_id=item["node_id"])
+        if team_aliases and team in team_aliases:
+            team = team_aliases[team]
         gating_by_team.setdefault(team, []).append(item)
     for test in tests:
         if test.is_manual:
             team = test.team or _get_team_from_node_id(node_id=test.node_id)
+            if team_aliases and team in team_aliases:
+                team = team_aliases[team]
             manual_by_team.setdefault(team, []).append(_test_info_to_template_item(test_info=test))
 
     html = template.render(
