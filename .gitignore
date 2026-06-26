@@ -14,11 +14,9 @@ venv/
 # IDE
 .idea/
 .vscode/
+.dev
 *.swp
 *.swo
-
-# UV
-uv.lock
 
 # Testing
 .pytest_cache/
