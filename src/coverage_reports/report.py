@@ -7,6 +7,7 @@ Produces a dashboard index page and per-version detail pages.
 from __future__ import annotations
 
 import logging
+import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -525,6 +526,31 @@ def render_index(
     return template.render(repos=repos, generated_at=generated_at)
 
 
+def _write_group_writable(path: Path, content: str) -> None:
+    """Write text content to a file and ensure it is group-writable.
+
+    On OpenShift, containers run as a random UID in GID 0. Setting
+    group-write permission allows subsequent container runs with a
+    different UID (but same GID 0) to overwrite the file.
+
+    Before writing, any existing file is unlinked first. This handles
+    the migration case where old files were written without group-write
+    permission and are owned by a different UID. Unlinking works because
+    the parent directory is group-writable, so any GID-0 user can remove
+    entries from it regardless of file ownership.
+
+    Args:
+        path: File path to write.
+        content: Text content to write.
+    """
+    path.unlink(missing_ok=True)
+    path.write_text(data=content, encoding="utf-8")
+    try:
+        path.chmod(path.stat().st_mode | stat.S_IWGRP)
+    except OSError:
+        LOGGER.warning(f"Could not set group-writable permission on {path}")
+
+
 def write_reports(
     output_dir: Path,
     repo_versions: dict[str, list[VersionReportData]],
@@ -541,10 +567,10 @@ def write_reports(
 
     index_html = render_index(repo_versions=repo_versions)
     index_path = output_dir / "index.html"
-    index_path.write_text(data=index_html, encoding="utf-8")
+    _write_group_writable(path=index_path, content=index_html)
     LOGGER.info(f"Wrote dashboard index to {index_path}")
 
     for filename, html_content in version_htmls.items():
         report_path = output_dir / filename
-        report_path.write_text(data=html_content, encoding="utf-8")
+        _write_group_writable(path=report_path, content=html_content)
         LOGGER.info(f"Wrote version report to {report_path}")
