@@ -181,3 +181,22 @@ class TestLoadConfig:
         config_file.write_text(data=yaml.dump(data=config), encoding="utf-8")
         with pytest.raises(ConfigError, match="collector"):
             load_config(config_path=config_file)
+
+    def test_team_aliases_loaded(self, tmp_path: Path, rp_env_vars: dict) -> None:
+        config = {
+            "repos": [{
+                "name": "r",
+                "url": "https://example.com/r",
+                "collector": "pytest",
+                "versions": [{"branch": "main", "version": "1.0"}],
+            }],
+            "team_aliases": {"observability": "install_upgrade_operators"},
+        }
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(data=yaml.dump(data=config), encoding="utf-8")
+        app_config = load_config(config_path=config_file)
+        assert app_config.team_aliases == {"observability": "install_upgrade_operators"}
+
+    def test_team_aliases_default_empty(self, minimal_config_yaml: Path, rp_env_vars: dict) -> None:
+        config = load_config(config_path=minimal_config_yaml)
+        assert config.team_aliases == {}

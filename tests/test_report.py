@@ -146,6 +146,124 @@ class TestRenderVersionReport:
         assert "/launches/all/100/200" in html
 
 
+class TestTeamAliases:
+    """Tests for team_aliases in render_version_report."""
+
+    def test_alias_resolves_team(self) -> None:
+        tests = [
+            TestInfo(node_id="tests/observability/test_metrics.py::test_metric", team="observability"),
+        ]
+        rp_results = {
+            "tests.observability.test_metrics.test_metric": ItemResult(
+                name="tests.observability.test_metrics.test_metric",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0-100",
+                launch_name="OBS-gating",
+                launch_id=1,
+                item_id=10,
+            ),
+        }
+
+        html, ver_data = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+            team_aliases={"observability": "install_upgrade_operators"},
+        )
+
+        assert "install_upgrade_operators" in html
+        # The original team name should not appear as a team heading
+        assert ver_data.passed == 1
+
+    def test_missing_alias_returns_original(self) -> None:
+        tests = [
+            TestInfo(node_id="tests/network/test_foo.py::test_pass", team="network"),
+        ]
+        rp_results = {
+            "tests.network.test_foo.test_pass": ItemResult(
+                name="tests.network.test_foo.test_pass",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0-100",
+                launch_name="NET-gating",
+                launch_id=1,
+                item_id=10,
+            ),
+        }
+
+        html, _ = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+            team_aliases={"observability": "install_upgrade_operators"},
+        )
+
+        assert "network" in html
+
+    def test_none_team_aliases_handled(self) -> None:
+        tests = [
+            TestInfo(node_id="tests/network/test_foo.py::test_pass", team="network"),
+        ]
+        rp_results = {
+            "tests.network.test_foo.test_pass": ItemResult(
+                name="tests.network.test_foo.test_pass",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0-100",
+                launch_name="NET-gating",
+                launch_id=1,
+                item_id=10,
+            ),
+        }
+
+        html, _ = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+            team_aliases=None,
+        )
+
+        assert "network" in html
+
+    def test_empty_team_aliases_handled(self) -> None:
+        tests = [
+            TestInfo(node_id="tests/network/test_foo.py::test_pass", team="network"),
+        ]
+        rp_results = {
+            "tests.network.test_foo.test_pass": ItemResult(
+                name="tests.network.test_foo.test_pass",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0-100",
+                launch_name="NET-gating",
+                launch_id=1,
+                item_id=10,
+            ),
+        }
+
+        html, _ = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+            team_aliases={},
+        )
+
+        assert "network" in html
+
+
 class TestRenderIndex:
     """Tests for dashboard index rendering."""
 

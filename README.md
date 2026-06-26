@@ -142,6 +142,7 @@ See `config.example.yaml` for the full structure. Key sections:
 | `rp` | ReportPortal query settings (since_days, max_bundles, stale_days, arch) |
 | `team_mapping` | RP TEAM attribute → display team name mapping |
 | `team_strip_suffixes` | Suffixes to strip during team normalization |
+| `team_aliases` | Directory team name → target team name aliases |
 | `server` | HTTP server settings (port, output_dir) |
 
 ### Environment Variables

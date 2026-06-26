@@ -98,6 +98,7 @@ class AppConfig:
         rp: ReportPortal settings.
         team_mapping: RP TEAM attribute → display team name.
         team_strip_suffixes: Suffixes stripped during RP TEAM normalization.
+        team_aliases: Directory team name → target team name aliases.
         server: HTTP server settings.
     """
 
@@ -105,6 +106,7 @@ class AppConfig:
     rp: RPConfig
     team_mapping: dict[str, str]
     team_strip_suffixes: list[str]
+    team_aliases: dict[str, str]
     server: ServerConfig
 
 
@@ -249,12 +251,14 @@ def load_config(config_path: Path, require_rp: bool = True) -> AppConfig:
 
     team_mapping = raw.get("team_mapping", {})
     team_strip_suffixes = raw.get("team_strip_suffixes", [])
+    team_aliases = raw.get("team_aliases", {})
     server = _parse_server(raw=raw.get("server"))
 
     LOGGER.info(
         f"Loaded config: {len(repos)} repos, "
         f"{len(team_mapping)} team mappings, "
-        f"{len(team_strip_suffixes)} strip suffixes"
+        f"{len(team_strip_suffixes)} strip suffixes, "
+        f"{len(team_aliases)} team aliases"
     )
 
     return AppConfig(
@@ -262,5 +266,6 @@ def load_config(config_path: Path, require_rp: bool = True) -> AppConfig:
         rp=rp_config,
         team_mapping=team_mapping,
         team_strip_suffixes=team_strip_suffixes,
+        team_aliases=team_aliases,
         server=server,
     )
