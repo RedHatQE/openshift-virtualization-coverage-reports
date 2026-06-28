@@ -312,7 +312,7 @@ def _check_decorators(decorators: list[ast.expr]) -> tuple[bool, str, str | None
     return False, "", None
 
 
-def _scan_quarantined_tests(tests_path: Path) -> list[TestInfo]:
+def _scan_quarantined_tests(tests_path: Path, repo_path: Path) -> list[TestInfo]:
     """Scan test files for quarantined tests using AST analysis.
 
     Detects two quarantine patterns:
@@ -321,6 +321,8 @@ def _scan_quarantined_tests(tests_path: Path) -> list[TestInfo]:
 
     Args:
         tests_path: Root directory to scan for test files.
+        repo_path: Root of the cloned repository, used to compute
+            relative paths for node IDs.
 
     Returns:
         List of TestInfo entries for quarantined tests.
@@ -335,7 +337,7 @@ def _scan_quarantined_tests(tests_path: Path) -> list[TestInfo]:
             LOGGER.warning(f"Could not parse {test_file}, skipping quarantine scan")
             continue
 
-        rel_path = str(test_file)
+        rel_path = str(test_file.relative_to(repo_path))
 
         for top_node in ast.iter_child_nodes(tree):
             if isinstance(top_node, ast.ClassDef):
@@ -393,13 +395,15 @@ def _scan_quarantined_tests(tests_path: Path) -> list[TestInfo]:
     return quarantined
 
 
-def _scan_manual_tests(tests_path: Path) -> list[TestInfo]:
+def _scan_manual_tests(tests_path: Path, repo_path: Path) -> list[TestInfo]:
     """Scan test files for manual (STD placeholder) tests.
 
     Identifies tests in classes with ``__test__ = False``.
 
     Args:
         tests_path: Root directory to scan for test files.
+        repo_path: Root of the cloned repository, used to compute
+            relative paths for node IDs.
 
     Returns:
         List of TestInfo entries for manual/placeholder tests.
@@ -413,7 +417,7 @@ def _scan_manual_tests(tests_path: Path) -> list[TestInfo]:
         except (SyntaxError, UnicodeDecodeError):
             continue
 
-        rel_path = str(test_file)
+        rel_path = str(test_file.relative_to(repo_path))
 
         for top_node in ast.iter_child_nodes(tree):
             if not isinstance(top_node, ast.ClassDef):
@@ -512,8 +516,8 @@ class PytestCollector:
 
         automated_ids = _collect_pytest_tests(repo_path=repo_path, tests_dir=tests_dir)
         gating_ids = _collect_gating_tests(repo_path=repo_path, tests_dir=tests_dir)
-        quarantined_tests = _scan_quarantined_tests(tests_path=tests_path)
-        manual_tests = _scan_manual_tests(tests_path=tests_path)
+        quarantined_tests = _scan_quarantined_tests(tests_path=tests_path, repo_path=repo_path)
+        manual_tests = _scan_manual_tests(tests_path=tests_path, repo_path=repo_path)
 
         quarantined_node_ids = {test.node_id for test in quarantined_tests}
         manual_node_ids = {test.node_id for test in manual_tests}

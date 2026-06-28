@@ -9,8 +9,10 @@ from datetime import UTC, datetime, timedelta
 from coverage_reports.collectors.base import TestInfo
 from coverage_reports.report import (
     VersionReportData,
+    _detect_matrix,
     _get_team_from_node_id,
     _group_parameterized_items,
+    _parse_param_dimensions,
     render_index,
     render_version_report,
 )
@@ -93,6 +95,62 @@ class TestGroupParameterizedItems:
         assert len(result) == 2
         assert result[0]["node_id"] == "tests/b.py::test_b"
         assert result[1]["node_id"] == "tests/a.py::test_a"
+
+
+class TestParseParamDimensions:
+    """Tests for _parse_param_dimensions helper."""
+
+    def test_multi_dim(self) -> None:
+        assert _parse_param_dimensions("#all-images#-#cdis.cdi#") == [
+            "all-images",
+            "cdis.cdi",
+        ]
+
+    def test_single_dim(self) -> None:
+        assert _parse_param_dimensions("#hostpath-csi-basic#") is None
+
+    def test_no_hash(self) -> None:
+        assert _parse_param_dimensions("sap_hana_vm0") is None
+
+    def test_three_dims(self) -> None:
+        assert _parse_param_dimensions("#a#-#b#-#c#") == ["a", "b", "c"]
+
+
+class TestDetectMatrix:
+    """Tests for _detect_matrix helper."""
+
+    def test_2d_matrix(self) -> None:
+        base = "tests/test_a.py::test_x"
+        items = [
+            {"node_id": f"{base}[#r1#-#c1#]", "status": "PASSED"},
+            {"node_id": f"{base}[#r1#-#c2#]", "status": "FAILED"},
+            {"node_id": f"{base}[#r2#-#c1#]", "status": "PASSED"},
+        ]
+        result = _detect_matrix(group_items=items, base_name=base)
+        assert result["is_matrix"] is True
+        assert sorted(result["matrix_rows"]) == ["r1", "r2"]
+        assert sorted(result["matrix_cols"]) == ["c1", "c2"]
+        assert result["matrix_cells"]["r1"]["c1"]["status"] == "PASSED"
+        assert result["matrix_cells"]["r1"]["c2"]["status"] == "FAILED"
+        assert result["matrix_cells"]["r2"]["c1"]["status"] == "PASSED"
+
+    def test_single_dim_not_matrix(self) -> None:
+        base = "tests/test_a.py::test_x"
+        items = [
+            {"node_id": f"{base}[#val1#]", "status": "PASSED"},
+            {"node_id": f"{base}[#val2#]", "status": "PASSED"},
+        ]
+        result = _detect_matrix(group_items=items, base_name=base)
+        assert result["is_matrix"] is False
+
+    def test_mixed_dims_not_matrix(self) -> None:
+        base = "tests/test_a.py::test_x"
+        items = [
+            {"node_id": f"{base}[#r1#-#c1#]", "status": "PASSED"},
+            {"node_id": f"{base}[plain_param]", "status": "PASSED"},
+        ]
+        result = _detect_matrix(group_items=items, base_name=base)
+        assert result["is_matrix"] is False
 
 
 class TestRenderVersionReport:
