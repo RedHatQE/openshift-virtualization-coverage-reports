@@ -7,6 +7,7 @@ Produces a dashboard index page and per-version detail pages.
 from __future__ import annotations
 
 import logging
+import operator
 import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -111,6 +112,86 @@ class VersionReportData:
     quarantined: int
     coverage_pct: float
     report_filename: str
+
+
+_NODE_ID_KEY = operator.itemgetter("node_id")
+
+
+def _sort_and_group(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sort items by node_id and group parameterized tests."""
+    return _group_parameterized_items(items=sorted(items, key=_NODE_ID_KEY))
+
+
+def _flatten_grouped_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flatten grouped items back to individual items for re-aggregation."""
+    result = []
+    for item in items:
+        if item.get("is_group"):
+            result.extend(item["group_items"])
+        else:
+            result.append(item)
+    return result
+
+
+def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group parameterized test items by their base name.
+
+    Items whose ``node_id`` contains ``[`` are considered parameterized.
+    Groups of 2+ are collapsed into a single group item with metadata;
+    singletons and non-parameterized items pass through unchanged.
+
+    Args:
+        items: Sorted list of template item dicts.
+
+    Returns:
+        New list with parameterized groups collapsed.
+    """
+    groups: dict[str, list[dict[str, Any]]] = {}
+
+    for item in items:
+        node_id: str = item["node_id"]
+        bracket = node_id.find("[")
+        if bracket != -1:
+            base_name = node_id[:bracket]
+            groups.setdefault(base_name, []).append(item)
+
+    result: list[dict[str, Any]] = []
+    seen_bases: set[str] = set()
+
+    for item in items:
+        node_id = item["node_id"]
+        bracket = node_id.find("[")
+        if bracket != -1:
+            base_name = node_id[:bracket]
+            if base_name in seen_bases:
+                continue
+            seen_bases.add(base_name)
+            group_items = groups[base_name]
+            if len(group_items) >= 2:
+                group_item = {
+                    **group_items[0],
+                    "node_id": base_name,
+                    "is_group": True,
+                    "group_count": len(group_items),
+                    "group_items": group_items,
+                    "bundle": None,
+                    "last_executed": None,
+                    "launch_id": None,
+                    "item_id": None,
+                    "defect_type": None,
+                    "defect_comment": None,
+                }
+                result.append(group_item)
+            else:
+                single = {**group_items[0], "is_group": False}
+                result.append(single)
+        else:
+            if "is_group" not in item:
+                result.append({**item, "is_group": False})
+            else:
+                result.append(item)
+
+    return result
 
 
 def _get_team_from_node_id(node_id: str) -> str:
@@ -273,12 +354,12 @@ def _build_team_data(
         stale=len(stale_items),
         quarantined=len(quarantined_items),
         coverage_pct=round(coverage_pct, 1),
-        failed_items=sorted(failed_items, key=lambda item: item["node_id"]),
-        stale_items=sorted(stale_items, key=lambda item: item["node_id"]),
-        quarantined_items=sorted(quarantined_items, key=lambda item: item["node_id"]),
-        never_executed_items=sorted(never_executed_items, key=lambda item: item["node_id"]),
-        passed_items=sorted(passed_items, key=lambda item: item["node_id"]),
-        skipped_items=sorted(skipped_items, key=lambda item: item["node_id"]),
+        failed_items=_sort_and_group(items=failed_items),
+        stale_items=_sort_and_group(items=stale_items),
+        quarantined_items=_sort_and_group(items=quarantined_items),
+        never_executed_items=_sort_and_group(items=never_executed_items),
+        passed_items=_sort_and_group(items=passed_items),
+        skipped_items=_sort_and_group(items=skipped_items),
     )
 
 
@@ -369,23 +450,48 @@ def render_version_report(
     all_gating: list[dict[str, Any]] = []
 
     for td in team_data_list:
-        all_failed.extend(td.failed_items)
-        all_stale.extend(td.stale_items)
-        all_quarantined.extend(td.quarantined_items)
-        all_never.extend(td.never_executed_items)
-        all_passed.extend(td.passed_items)
-        all_skipped.extend(td.skipped_items)
+        all_failed.extend(_flatten_grouped_items(items=td.failed_items))
+        all_stale.extend(_flatten_grouped_items(items=td.stale_items))
+        all_quarantined.extend(_flatten_grouped_items(items=td.quarantined_items))
+        all_never.extend(_flatten_grouped_items(items=td.never_executed_items))
+        all_passed.extend(_flatten_grouped_items(items=td.passed_items))
+        all_skipped.extend(_flatten_grouped_items(items=td.skipped_items))
+
+    # Apply parameterized grouping to the aggregated lists
+    all_failed = _sort_and_group(items=all_failed)
+    all_stale = _sort_and_group(items=all_stale)
+    all_quarantined = _sort_and_group(items=all_quarantined)
+    all_never = _sort_and_group(items=all_never)
+    all_passed = _sort_and_group(items=all_passed)
+    all_skipped = _sort_and_group(items=all_skipped)
 
     # Identify gating gaps (never-executed or stale gating tests)
     gating_node_ids = {test.node_id for test in tests if test.is_gating}
     for item in all_never:
-        if item["node_id"] in gating_node_ids:
+        node_id = item["node_id"]
+        if item.get("is_group"):
+            # Check if any sub-item is a gating test
+            for sub in item["group_items"]:
+                if sub["node_id"] in gating_node_ids:
+                    gating_item = {**item, "status": "NEVER_EXECUTED", "status_css": "never", "status_label": "NEVER EXECUTED"}
+                    all_gating.append(gating_item)
+                    break
+        elif node_id in gating_node_ids:
             gating_item = {**item, "status": "NEVER_EXECUTED", "status_css": "never", "status_label": "NEVER EXECUTED"}
             all_gating.append(gating_item)
     for item in all_stale:
-        if item["node_id"] in gating_node_ids:
+        node_id = item["node_id"]
+        if item.get("is_group"):
+            for sub in item["group_items"]:
+                if sub["node_id"] in gating_node_ids:
+                    gating_item = {**item, "status": "STALE", "status_css": "stale", "status_label": "STALE"}
+                    all_gating.append(gating_item)
+                    break
+        elif node_id in gating_node_ids:
             gating_item = {**item, "status": "STALE", "status_css": "stale", "status_label": "STALE"}
             all_gating.append(gating_item)
+
+    all_gating = _sort_and_group(items=all_gating)
 
     # Build aggregated analysis records for display
     display_analysis: list[LaunchAnalysisRecord] = []
@@ -465,11 +571,11 @@ def render_version_report(
             "stale": td.stale,
             "quarantined": td.quarantined,
             "coverage_pct": td.coverage_pct,
-            "gating_items": sorted(gating_by_team.get(td.name, []), key=lambda item: item["node_id"]),
+            "gating_items": _sort_and_group(items=gating_by_team.get(td.name, [])),
             "failed_items": td.failed_items,
             "stale_items": td.stale_items,
             "quarantined_items": td.quarantined_items,
-            "manual_items": sorted(manual_by_team.get(td.name, []), key=lambda item: item["node_id"]),
+            "manual_items": _sort_and_group(items=manual_by_team.get(td.name, [])),
             "never_executed_items": td.never_executed_items,
             "passed_items": td.passed_items,
             "skipped_items": td.skipped_items,
