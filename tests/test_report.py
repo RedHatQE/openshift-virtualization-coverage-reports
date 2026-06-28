@@ -10,6 +10,7 @@ from coverage_reports.collectors.base import TestInfo
 from coverage_reports.report import (
     VersionReportData,
     _detect_matrix,
+    _extract_urls,
     _get_team_from_node_id,
     _group_parameterized_items,
     _parse_param_dimensions,
@@ -478,3 +479,43 @@ class TestRenderIndex:
         assert "4.99" in html
         assert "report_4.22.html" in html
         assert "report_4.99.html" in html
+
+
+class TestExtractUrls:
+    """Tests for _extract_urls."""
+
+    def test_empty_string(self) -> None:
+        assert _extract_urls("") == []
+
+    def test_none_input(self) -> None:
+        assert _extract_urls(None) == []
+
+    def test_no_urls(self) -> None:
+        assert _extract_urls("plain text without urls") == []
+
+    def test_single_url(self) -> None:
+        assert _extract_urls("see https://example.com/path") == ["https://example.com/path"]
+
+    def test_multiple_urls(self) -> None:
+        text = "links: https://a.com and http://b.org/page"
+        assert _extract_urls(text) == ["https://a.com", "http://b.org/page"]
+
+    def test_trailing_period_stripped(self) -> None:
+        assert _extract_urls("visit https://example.com.") == ["https://example.com"]
+
+    def test_trailing_comma_stripped(self) -> None:
+        assert _extract_urls("see https://example.com, then") == ["https://example.com"]
+
+    def test_trailing_semicolon_stripped(self) -> None:
+        assert _extract_urls("url: https://example.com;") == ["https://example.com"]
+
+    def test_trailing_colon_stripped(self) -> None:
+        assert _extract_urls("ref: https://example.com:") == ["https://example.com"]
+
+    def test_url_with_port_preserved(self) -> None:
+        assert _extract_urls("at https://example.com:8080/path") == ["https://example.com:8080/path"]
+
+    def test_url_with_query_params(self) -> None:
+        assert _extract_urls("https://example.com/path?key=value&other=1") == [
+            "https://example.com/path?key=value&other=1"
+        ]
