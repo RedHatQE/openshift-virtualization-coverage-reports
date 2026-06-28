@@ -133,6 +133,27 @@
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: #e8e8e8; }
         .sort-indicator { margin-left: 4px; font-size: 0.8em; }
+
+        /* Multi-dimension matrix grid */
+        .matrix-grid { margin: 4px 8px 8px 8px; border: 1px solid #e0e0e0; border-radius: 4px; overflow-x: auto; }
+        .matrix-grid table { table-layout: auto; margin: 0; border-collapse: collapse; }
+        .matrix-grid th { font-size: 0.8em; padding: 4px 8px; background: #f0f4f8; border: 1px solid #e0e0e0; white-space: nowrap; }
+        .matrix-grid td { padding: 4px 8px; text-align: center; border: 1px solid #e0e0e0; }
+        .matrix-grid th.row-header { text-align: left; background: #f0f4f8; font-weight: 600; position: sticky; left: 0; z-index: 1; }
+        .matrix-grid th.corner { background: #e8ecf0; }
+        .matrix-grid .cell-pass { background: #d4edda; color: #155724; font-weight: 600; }
+        .matrix-grid .cell-fail { background: #f8d7da; color: #721c24; font-weight: 600; }
+        .matrix-grid .cell-skip { background: #cff4fc; color: #055160; }
+        .matrix-grid .cell-never { background: #e9ecef; color: #999; }
+        .matrix-grid .cell-stale { background: #fff3cd; color: #856404; }
+
+        /* Mini stats */
+        .mini-stats { font-size: 0.8em; color: #666; }
+        .mini-stats .p { color: #198754; }
+        .mini-stats .f { color: #dc3545; }
+        .mini-stats .s { color: #0dcaf0; }
+        .mini-stats .n { color: #6c757d; }
+        .mini-stats .st { color: #856404; }
     </style>
     <script>
         function openTab(evt, tabName) {

@@ -7,7 +7,61 @@
     · <a href="index.html">← Dashboard</a>
 </div>
 
-{# ── Macros for grouped / ungrouped rows ── #}
+{# ── Shared macros ── #}
+
+{% macro mini_stats(item) %}
+{% if item.status_counts %}
+<span class="mini-stats">—
+    {% if item.status_counts.get('PASSED') %}<span class="p">{{ item.status_counts.PASSED }} ✓</span> {% endif %}
+    {% if item.status_counts.get('FAILED') %}<span class="f">{{ item.status_counts.FAILED }} ✗</span> {% endif %}
+    {% if item.status_counts.get('NEVER_EXECUTED') %}<span class="n">{{ item.status_counts.NEVER_EXECUTED }} never</span> {% endif %}
+    {% if item.status_counts.get('SKIPPED') %}<span class="s">{{ item.status_counts.SKIPPED }} skip</span> {% endif %}
+    {% if item.status_counts.get('STALE') %}<span class="st">{{ item.status_counts.STALE }} stale</span>{% endif %}
+</span>
+{% endif %}
+{% endmacro %}
+
+{% macro matrix_grid(item) %}
+<div class="matrix-grid">
+    <table>
+        <thead>
+            <tr>
+                <th class="corner"></th>
+                {% for col in item.matrix_cols %}
+                <th>{{ col }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in item.matrix_rows %}
+            <tr>
+                <th class="row-header">{{ row }}</th>
+                {% for col in item.matrix_cols %}
+                {% set cell = item.matrix_cells.get(row, {}).get(col) %}
+                {% if cell %}
+                    {% if cell.status == 'PASSED' %}
+                    <td class="cell-pass">✓</td>
+                    {% elif cell.status == 'FAILED' %}
+                    <td class="cell-fail">✗</td>
+                    {% elif cell.status == 'SKIPPED' %}
+                    <td class="cell-skip">⊘</td>
+                    {% elif cell.status == 'STALE' %}
+                    <td class="cell-stale">⏳</td>
+                    {% else %}
+                    <td class="cell-never">—</td>
+                    {% endif %}
+                {% else %}
+                <td class="cell-never">—</td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
+{# ── Row macros ── #}
 
 {# FAILED table row #}
 {% macro failed_row(item, has_rp) %}
@@ -15,7 +69,12 @@
 <tr class="group-row">
     <td class="mono" colspan="{{ 6 if has_rp else 5 }}">
         <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+                {{ mini_stats(item) }}
+            </summary>
+            {% if item.is_matrix %}
+            {{ matrix_grid(item) }}
+            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr>
@@ -30,6 +89,7 @@
                 </tr>
                 {% endfor %}
             </table>
+            {% endif %}
         </details>
     </td>
 </tr>
@@ -53,7 +113,12 @@
 <tr class="group-row">
     <td class="mono" colspan="{{ 4 if has_rp else 3 }}">
         <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+                {{ mini_stats(item) }}
+            </summary>
+            {% if item.is_matrix %}
+            {{ matrix_grid(item) }}
+            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr>
@@ -66,6 +131,7 @@
                 </tr>
                 {% endfor %}
             </table>
+            {% endif %}
         </details>
     </td>
 </tr>
@@ -87,12 +153,18 @@
 <tr class="group-row">
     <td class="mono" colspan="1">
         <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+                {{ mini_stats(item) }}
+            </summary>
+            {% if item.is_matrix %}
+            {{ matrix_grid(item) }}
+            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr><td class="mono">{{ sub.node_id[item.node_id|length:] }}</td></tr>
                 {% endfor %}
             </table>
+            {% endif %}
         </details>
     </td>
 </tr>
@@ -107,7 +179,12 @@
 <tr class="group-row">
     <td class="mono" colspan="3">
         <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+                {{ mini_stats(item) }}
+            </summary>
+            {% if item.is_matrix %}
+            {{ matrix_grid(item) }}
+            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr>
@@ -117,6 +194,7 @@
                 </tr>
                 {% endfor %}
             </table>
+            {% endif %}
         </details>
     </td>
 </tr>
@@ -135,7 +213,12 @@
 <tr class="group-row">
     <td class="mono" colspan="2">
         <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+                {{ mini_stats(item) }}
+            </summary>
+            {% if item.is_matrix %}
+            {{ matrix_grid(item) }}
+            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr>
@@ -144,6 +227,7 @@
                 </tr>
                 {% endfor %}
             </table>
+            {% endif %}
         </details>
     </td>
 </tr>

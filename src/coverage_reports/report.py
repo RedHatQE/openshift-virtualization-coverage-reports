@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import operator
+import re
 import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -133,6 +134,75 @@ def _flatten_grouped_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+def _parse_param_dimensions(param_str: str) -> list[str] | None:
+    """Parse multi-dimensional parameter string into dimension values.
+
+    Multi-dim params use ``#value1#-#value2#`` format where each dimension
+    value is wrapped in ``#hash#`` delimiters separated by ``-``.
+
+    Args:
+        param_str: The parameter portion without surrounding brackets,
+            e.g. ``#all-images#-#cdis.cdi.kubevirt.io#``.
+
+    Returns:
+        List of dimension values if 2+ ``#value#`` segments found, else ``None``.
+    """
+    matches = re.findall(r"#([^#]+)#", param_str)
+    return matches if len(matches) >= 2 else None
+
+
+def _detect_matrix(
+    group_items: list[dict[str, Any]],
+    base_name: str,
+) -> dict[str, Any]:
+    """Detect whether grouped items form a 2-D parameter matrix.
+
+    Parses multi-dimensional ``#value#`` segments from each item's
+    parameter portion and, when every item has exactly two dimensions,
+    builds a row/col/cell structure suitable for a matrix grid view.
+
+    Args:
+        group_items: Items sharing the same base test name.
+        base_name: The common prefix (everything before ``[``).
+
+    Returns:
+        Dict with ``is_matrix`` key.  When ``True`` the dict also
+        contains ``matrix_rows``, ``matrix_cols`` and ``matrix_cells``.
+    """
+    params: list[dict[str, Any]] = []
+    for sub in group_items:
+        param_part = sub["node_id"][len(base_name):]
+        param_str = param_part.strip("[]")
+        dims = _parse_param_dimensions(param_str)
+        if dims:
+            params.append({"dims": dims, "item": sub})
+
+    if (
+        len(params) == len(group_items)
+        and all(len(p["dims"]) == len(params[0]["dims"]) for p in params)
+    ):
+        num_dims = len(params[0]["dims"])
+        if num_dims == 2:
+            row_values = sorted({p["dims"][0] for p in params})
+            col_values = sorted({p["dims"][1] for p in params})
+
+            # Nested dict for Jinja2 compatibility (no tuple keys)
+            matrix_cells: dict[str, dict[str, dict[str, Any]]] = {}
+            for p in params:
+                matrix_cells.setdefault(p["dims"][0], {})[p["dims"][1]] = p[
+                    "item"
+                ]
+
+            return {
+                "is_matrix": True,
+                "matrix_rows": row_values,
+                "matrix_cols": col_values,
+                "matrix_cells": matrix_cells,
+            }
+
+    return {"is_matrix": False}
+
+
 def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Group parameterized test items by their base name.
 
@@ -168,7 +238,13 @@ def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, An
             seen_bases.add(base_name)
             group_items = groups[base_name]
             if len(group_items) >= 2:
-                group_item = {
+                # Build status counts
+                status_counts: dict[str, int] = {}
+                for sub in group_items:
+                    s = sub.get("status", "UNKNOWN")
+                    status_counts[s] = status_counts.get(s, 0) + 1
+
+                group_item: dict[str, Any] = {
                     **group_items[0],
                     "node_id": base_name,
                     "is_group": True,
@@ -180,14 +256,21 @@ def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, An
                     "item_id": None,
                     "defect_type": None,
                     "defect_comment": None,
+                    "status_counts": status_counts,
                 }
+
+                matrix_info = _detect_matrix(
+                    group_items=group_items, base_name=base_name
+                )
+                group_item.update(matrix_info)
+
                 result.append(group_item)
             else:
-                single = {**group_items[0], "is_group": False}
+                single = {**group_items[0], "is_group": False, "is_matrix": False}
                 result.append(single)
         else:
             if "is_group" not in item:
-                result.append({**item, "is_group": False})
+                result.append({**item, "is_group": False, "is_matrix": False})
             else:
                 result.append(item)
 
@@ -473,25 +556,45 @@ def render_version_report(
             # Check if any sub-item is a gating test
             for sub in item["group_items"]:
                 if sub["node_id"] in gating_node_ids:
-                    gating_item = {**item, "status": "NEVER_EXECUTED", "status_css": "never", "status_label": "NEVER EXECUTED"}
+                    gating_item = {
+                        **item,
+                        "status": "NEVER_EXECUTED",
+                        "status_css": "never",
+                        "status_label": "NEVER EXECUTED",
+                    }
                     all_gating.append(gating_item)
                     break
         elif node_id in gating_node_ids:
-            gating_item = {**item, "status": "NEVER_EXECUTED", "status_css": "never", "status_label": "NEVER EXECUTED"}
+            gating_item = {
+                **item,
+                "status": "NEVER_EXECUTED",
+                "status_css": "never",
+                "status_label": "NEVER EXECUTED",
+            }
             all_gating.append(gating_item)
     for item in all_stale:
         node_id = item["node_id"]
         if item.get("is_group"):
             for sub in item["group_items"]:
                 if sub["node_id"] in gating_node_ids:
-                    gating_item = {**item, "status": "STALE", "status_css": "stale", "status_label": "STALE"}
+                    gating_item = {
+                        **item,
+                        "status": "STALE",
+                        "status_css": "stale",
+                        "status_label": "STALE",
+                    }
                     all_gating.append(gating_item)
                     break
         elif node_id in gating_node_ids:
-            gating_item = {**item, "status": "STALE", "status_css": "stale", "status_label": "STALE"}
+            gating_item = {
+                **item,
+                "status": "STALE",
+                "status_css": "stale",
+                "status_label": "STALE",
+            }
             all_gating.append(gating_item)
 
-    all_gating = _sort_and_group(items=all_gating)
+    all_gating.sort(key=_NODE_ID_KEY)
 
     # Build aggregated analysis records for display
     display_analysis: list[LaunchAnalysisRecord] = []
