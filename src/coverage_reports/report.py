@@ -118,6 +118,21 @@ class VersionReportData:
 _NODE_ID_KEY = operator.itemgetter("node_id")
 
 
+def _extract_urls(text: str | None) -> list[str]:
+    """Extract URLs from text.
+
+    Args:
+        text: Input text possibly containing URLs, or None.
+
+    Returns:
+        List of extracted URL strings.
+    """
+    if not text:
+        return []
+    raw = re.findall(r'https?://[^\s<>"\'\)\]]+', text)
+    return [url.rstrip(".,;:") for url in raw]
+
+
 def _sort_and_group(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sort items by node_id and group parameterized tests."""
     return _group_parameterized_items(items=sorted(items, key=_NODE_ID_KEY))
@@ -256,6 +271,9 @@ def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, An
                     "item_id": None,
                     "defect_type": None,
                     "defect_comment": None,
+                    "source": None,
+                    "is_manual": any(sub.get("is_manual") for sub in group_items),
+                    "comment_urls": [],
                     "status_counts": status_counts,
                 }
 
@@ -314,12 +332,15 @@ def _result_to_template_item(
         "status_css": _STATUS_CSS.get(status, "never"),
         "status_label": _STATUS_LABELS.get(status, status),
         "bundle": result.bundle,
-        "last_executed": result.last_executed[:10] if result.last_executed else "",
+        "last_executed": result.last_executed[:10] if result.last_executed else None,
         "launch_name": result.launch_name,
         "defect_type": result.defect_type,
         "defect_comment": result.defect_comment,
         "launch_id": result.launch_id,
         "item_id": result.item_id,
+        "source": result.source,
+        "comment_urls": _extract_urls(result.defect_comment or ""),
+        "is_manual": False,
     }
 
 
@@ -332,20 +353,25 @@ def _test_info_to_template_item(test_info: TestInfo) -> dict[str, Any]:
     Returns:
         Dict with fields needed by the template.
     """
-    if test_info.is_quarantined:
-        status = "QUARANTINED"
-    elif test_info.is_manual:
-        status = "NEVER_EXECUTED"
-    else:
-        status = "NEVER_EXECUTED"
+    status = "QUARANTINED" if test_info.is_quarantined else "NEVER_EXECUTED"
 
     return {
         "node_id": test_info.node_id,
         "status": status,
         "status_css": _STATUS_CSS.get(status, "never"),
         "status_label": _STATUS_LABELS.get(status, status),
+        "bundle": None,
+        "last_executed": None,
+        "launch_name": None,
+        "defect_type": None,
+        "defect_comment": None,
+        "launch_id": None,
+        "item_id": None,
+        "source": None,
+        "comment_urls": [],
         "quarantine_reason": test_info.quarantine_reason,
         "quarantine_jira": test_info.quarantine_jira,
+        "is_manual": test_info.is_manual,
     }
 
 
