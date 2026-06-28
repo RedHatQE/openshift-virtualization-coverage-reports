@@ -10,6 +10,7 @@ from coverage_reports.collectors.base import TestInfo
 from coverage_reports.report import (
     VersionReportData,
     _get_team_from_node_id,
+    _group_parameterized_items,
     render_index,
     render_version_report,
 )
@@ -33,6 +34,65 @@ class TestGetTeamFromNodeId:
 
     def test_single_component(self) -> None:
         assert _get_team_from_node_id(node_id="test_foo.py::test_bar") == "other"
+
+
+class TestGroupParameterizedItems:
+    """Tests for parameterized test grouping."""
+
+    def test_no_params(self) -> None:
+        items = [
+            {"node_id": "tests/net/test_a.py::test_foo", "status": "PASSED"},
+            {"node_id": "tests/net/test_b.py::test_bar", "status": "FAILED"},
+        ]
+        result = _group_parameterized_items(items=items)
+        assert len(result) == 2
+        assert all(not item["is_group"] for item in result)
+
+    def test_groups_parameterized(self) -> None:
+        items = [
+            {"node_id": "tests/net/test_a.py::test_foo[param1]", "status": "PASSED", "bundle": "b1"},
+            {"node_id": "tests/net/test_a.py::test_foo[param2]", "status": "PASSED", "bundle": "b1"},
+            {"node_id": "tests/net/test_a.py::test_foo[param3]", "status": "FAILED", "bundle": "b2"},
+        ]
+        result = _group_parameterized_items(items=items)
+        assert len(result) == 1
+        group = result[0]
+        assert group["is_group"] is True
+        assert group["group_count"] == 3
+        assert group["node_id"] == "tests/net/test_a.py::test_foo"
+        assert len(group["group_items"]) == 3
+
+    def test_single_param_not_grouped(self) -> None:
+        items = [
+            {"node_id": "tests/net/test_a.py::test_foo[only]", "status": "PASSED"},
+        ]
+        result = _group_parameterized_items(items=items)
+        assert len(result) == 1
+        assert result[0]["is_group"] is False
+
+    def test_mixed_grouped_and_plain(self) -> None:
+        items = [
+            {"node_id": "tests/test_a.py::test_bar", "status": "PASSED"},
+            {"node_id": "tests/test_a.py::test_foo[p1]", "status": "PASSED", "bundle": "b"},
+            {"node_id": "tests/test_a.py::test_foo[p2]", "status": "FAILED", "bundle": "b"},
+        ]
+        result = _group_parameterized_items(items=items)
+        assert len(result) == 2
+        assert result[0]["is_group"] is False
+        assert result[0]["node_id"] == "tests/test_a.py::test_bar"
+        assert result[1]["is_group"] is True
+        assert result[1]["group_count"] == 2
+
+    def test_preserves_order(self) -> None:
+        items = [
+            {"node_id": "tests/b.py::test_b[p1]", "status": "PASSED", "bundle": "x"},
+            {"node_id": "tests/b.py::test_b[p2]", "status": "PASSED", "bundle": "x"},
+            {"node_id": "tests/a.py::test_a", "status": "PASSED"},
+        ]
+        result = _group_parameterized_items(items=items)
+        assert len(result) == 2
+        assert result[0]["node_id"] == "tests/b.py::test_b"
+        assert result[1]["node_id"] == "tests/a.py::test_a"
 
 
 class TestRenderVersionReport:
@@ -144,6 +204,50 @@ class TestRenderVersionReport:
 
         assert "rp.example.com" in html
         assert "/launches/all/100/200" in html
+
+    def test_parameterized_tests_grouped_in_html(self) -> None:
+        tests = [
+            TestInfo(node_id="tests/network/test_foo.py::test_param[a]", team="network"),
+            TestInfo(node_id="tests/network/test_foo.py::test_param[b]", team="network"),
+            TestInfo(node_id="tests/network/test_foo.py::test_param[c]", team="network"),
+        ]
+        rp_results = {
+            "tests.network.test_foo.test_param[a]": ItemResult(
+                name="tests.network.test_foo.test_param[a]",
+                status="PASSED", last_executed=_RECENT_TS,
+                bundle="v4.22.0", launch_name="run", launch_id=1, item_id=10,
+            ),
+            "tests.network.test_foo.test_param[b]": ItemResult(
+                name="tests.network.test_foo.test_param[b]",
+                status="PASSED", last_executed=_RECENT_TS,
+                bundle="v4.22.0", launch_name="run", launch_id=1, item_id=11,
+            ),
+            "tests.network.test_foo.test_param[c]": ItemResult(
+                name="tests.network.test_foo.test_param[c]",
+                status="PASSED", last_executed=_RECENT_TS,
+                bundle="v4.22.0", launch_name="run", launch_id=1, item_id=12,
+            ),
+        }
+
+        html, ver_data = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+        )
+
+        # Group should appear in HTML
+        assert "3 params" in html
+        assert "group-row" in html
+        assert "param-table" in html
+        # Individual param suffixes should be in sub-table
+        assert "[a]" in html
+        assert "[b]" in html
+        assert "[c]" in html
+        # Counts should still reflect all 3
+        assert ver_data.passed == 3
 
 
 class TestTeamAliases:

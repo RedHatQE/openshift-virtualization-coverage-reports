@@ -7,6 +7,151 @@
     · <a href="index.html">← Dashboard</a>
 </div>
 
+{# ── Macros for grouped / ungrouped rows ── #}
+
+{# FAILED table row #}
+{% macro failed_row(item, has_rp) %}
+{% if item.is_group %}
+<tr class="group-row">
+    <td class="mono" colspan="{{ 6 if has_rp else 5 }}">
+        <details>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr>
+                    <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
+                    <td>{{ sub.bundle | default('-') }}</td>
+                    <td>{{ sub.last_executed | default('-') }}</td>
+                    <td>{{ sub.defect_type | default('-') }}</td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ sub.defect_comment | default('-') }}</td>
+                    {% if has_rp %}
+                    <td>{% if sub.launch_id and sub.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ sub.launch_id }}/{{ sub.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </table>
+        </details>
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td class="mono">{{ item.node_id }}</td>
+    <td>{{ item.bundle | default('-') }}</td>
+    <td>{{ item.last_executed | default('-') }}</td>
+    <td>{{ item.defect_type | default('-') }}</td>
+    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ item.defect_comment | default('-') }}</td>
+    {% if has_rp %}
+    <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+    {% endif %}
+</tr>
+{% endif %}
+{% endmacro %}
+
+{# PASSED / STALE / SKIPPED table row (Test, Bundle, Date, Log) #}
+{% macro bundle_date_row(item, has_rp) %}
+{% if item.is_group %}
+<tr class="group-row">
+    <td class="mono" colspan="{{ 4 if has_rp else 3 }}">
+        <details>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr>
+                    <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
+                    <td>{{ sub.bundle | default('-') }}</td>
+                    <td>{{ sub.last_executed | default('-') }}</td>
+                    {% if has_rp %}
+                    <td>{% if sub.launch_id and sub.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ sub.launch_id }}/{{ sub.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </table>
+        </details>
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td class="mono">{{ item.node_id }}</td>
+    <td>{{ item.bundle | default('-') }}</td>
+    <td>{{ item.last_executed | default('-') }}</td>
+    {% if has_rp %}
+    <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+    {% endif %}
+</tr>
+{% endif %}
+{% endmacro %}
+
+{# NEVER EXECUTED / MANUAL table row (Test only) #}
+{% macro single_col_row(item) %}
+{% if item.is_group %}
+<tr class="group-row">
+    <td class="mono" colspan="1">
+        <details>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr><td class="mono">{{ sub.node_id[item.node_id|length:] }}</td></tr>
+                {% endfor %}
+            </table>
+        </details>
+    </td>
+</tr>
+{% else %}
+<tr><td class="mono">{{ item.node_id }}</td></tr>
+{% endif %}
+{% endmacro %}
+
+{# QUARANTINED table row (Test, Jira, Reason) #}
+{% macro quarantined_row(item) %}
+{% if item.is_group %}
+<tr class="group-row">
+    <td class="mono" colspan="3">
+        <details>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr>
+                    <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
+                    <td>{% if sub.quarantine_jira %}<a href="https://issues.redhat.com/browse/{{ sub.quarantine_jira }}">{{ sub.quarantine_jira }}</a>{% else %}-{% endif %}</td>
+                    <td>{{ sub.quarantine_reason | default('-') }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </details>
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td class="mono">{{ item.node_id }}</td>
+    <td>{% if item.quarantine_jira %}<a href="https://issues.redhat.com/browse/{{ item.quarantine_jira }}">{{ item.quarantine_jira }}</a>{% else %}-{% endif %}</td>
+    <td>{{ item.quarantine_reason | default('-') }}</td>
+</tr>
+{% endif %}
+{% endmacro %}
+
+{# GATING table row (Test, Status) #}
+{% macro gating_row(item) %}
+{% if item.is_group %}
+<tr class="group-row">
+    <td class="mono" colspan="2">
+        <details>
+            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span></summary>
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr>
+                    <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
+                    <td>{{ sub.status_label }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </details>
+    </td>
+</tr>
+{% else %}
+<tr><td class="mono">{{ item.node_id }}</td><td>{{ item.status_label }}</td></tr>
+{% endif %}
+{% endmacro %}
+
 <!-- Tabs -->
 <div class="tabs">
     <button class="tab-btn active" onclick="openTab(event, 'summary')">Summary</button>
@@ -117,10 +262,16 @@
     <details open class="section-gating">
         <summary>⚠ GATING ({{ team.gating_items | length }}) <small class="section-desc">— Gating tests with no results or stale</small></summary>
         <table>
-            <tr><th>Test</th><th>Status</th></tr>
+            <colgroup>
+                <col style="width: 80%">
+                <col style="width: 20%">
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Status</th></tr></thead>
+            <tbody>
             {% for item in team.gating_items %}
-            <tr><td class="mono">{{ item.node_id }}</td><td>{{ item.status_label }}</td></tr>
+            {{ gating_row(item) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}
@@ -130,19 +281,20 @@
     <details open class="section-failed">
         <summary>FAILED TESTS ({{ team.failed_items | length }}) <small class="section-desc">— Most recent result is FAILED</small></summary>
         <table>
-            <tr><th>Test</th><th>Bundle</th><th>Date</th><th>Defect</th><th>Comment</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            <colgroup>
+                <col style="width: 55%">
+                <col style="width: 12%">
+                <col style="width: 8%">
+                <col style="width: 8%">
+                <col style="width: 12%">
+                {% if rp_url %}<col style="width: 5%">{% endif %}
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Bundle</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Date</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Defect</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Comment</th>{% if rp_url %}<th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Log</th>{% endif %}</tr></thead>
+            <tbody>
             {% for item in team.failed_items %}
-            <tr>
-                <td class="mono">{{ item.node_id }}</td>
-                <td>{{ item.bundle | default('-') }}</td>
-                <td>{{ item.last_executed | default('-') }}</td>
-                <td>{{ item.defect_type | default('-') }}</td>
-                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ item.defect_comment | default('-') }}</td>
-                {% if rp_url %}
-                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
-                {% endif %}
-            </tr>
+            {{ failed_row(item, rp_url) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}
@@ -152,14 +304,17 @@
     <details class="section-quarantined">
         <summary>⏸ QUARANTINED ({{ team.quarantined_items | length }}) <small class="section-desc">— Intentionally skipped due to known bugs</small></summary>
         <table>
-            <tr><th>Test</th><th>Jira</th><th>Reason</th></tr>
+            <colgroup>
+                <col style="width: 60%">
+                <col style="width: 15%">
+                <col style="width: 25%">
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Jira</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Reason</th></tr></thead>
+            <tbody>
             {% for item in team.quarantined_items %}
-            <tr>
-                <td class="mono">{{ item.node_id }}</td>
-                <td>{% if item.quarantine_jira %}<a href="https://issues.redhat.com/browse/{{ item.quarantine_jira }}">{{ item.quarantine_jira }}</a>{% else %}-{% endif %}</td>
-                <td>{{ item.quarantine_reason | default('-') }}</td>
-            </tr>
+            {{ quarantined_row(item) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}
@@ -169,10 +324,15 @@
     <details open class="section-manual">
         <summary>MANUAL TESTS ({{ team.manual_items | length }}) <small class="section-desc">— Unimplemented test designs (__test__ = False)</small></summary>
         <table>
-            <tr><th>Test</th></tr>
+            <colgroup>
+                <col style="width: 100%">
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th></tr></thead>
+            <tbody>
             {% for item in team.manual_items %}
-            <tr><td class="mono">{{ item.node_id }}</td></tr>
+            {{ single_col_row(item) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}
@@ -182,10 +342,15 @@
     <details class="section-never">
         <summary>NEVER EXECUTED ({{ team.never_executed_items | length }}) <small class="section-desc">— Implemented tests with no RP results</small></summary>
         <table>
-            <tr><th>Test</th></tr>
+            <colgroup>
+                <col style="width: 100%">
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th></tr></thead>
+            <tbody>
             {% for item in team.never_executed_items %}
-            <tr><td class="mono">{{ item.node_id }}</td></tr>
+            {{ single_col_row(item) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}
@@ -195,17 +360,18 @@
     <details class="section-stale">
         <summary>STALE TESTS ({{ team.stale_items | length }}) <small class="section-desc">— Last execution older than {{ stale_days }} days</small></summary>
         <table>
-            <tr><th>Test</th><th>Bundle</th><th>Date</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            <colgroup>
+                <col style="width: 65%">
+                <col style="width: 15%">
+                <col style="width: 12%">
+                {% if rp_url %}<col style="width: 8%">{% endif %}
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Bundle</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Date</th>{% if rp_url %}<th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Log</th>{% endif %}</tr></thead>
+            <tbody>
             {% for item in team.stale_items %}
-            <tr>
-                <td class="mono">{{ item.node_id }}</td>
-                <td>{{ item.bundle | default('-') }}</td>
-                <td>{{ item.last_executed | default('-') }}</td>
-                {% if rp_url %}
-                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
-                {% endif %}
-            </tr>
+            {{ bundle_date_row(item, rp_url) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}
@@ -215,17 +381,18 @@
     <details class="section-passed">
         <summary>PASSED TESTS ({{ team.passed_items | length }}) <small class="section-desc">— Most recent result is PASSED</small></summary>
         <table>
-            <tr><th>Test</th><th>Bundle</th><th>Date</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            <colgroup>
+                <col style="width: 65%">
+                <col style="width: 15%">
+                <col style="width: 12%">
+                {% if rp_url %}<col style="width: 8%">{% endif %}
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Bundle</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Date</th>{% if rp_url %}<th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Log</th>{% endif %}</tr></thead>
+            <tbody>
             {% for item in team.passed_items %}
-            <tr>
-                <td class="mono">{{ item.node_id }}</td>
-                <td>{{ item.bundle | default('-') }}</td>
-                <td>{{ item.last_executed | default('-') }}</td>
-                {% if rp_url %}
-                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
-                {% endif %}
-            </tr>
+            {{ bundle_date_row(item, rp_url) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}
@@ -235,17 +402,18 @@
     <details class="section-skipped">
         <summary>SKIPPED TESTS ({{ team.skipped_items | length }}) <small class="section-desc">— Most recent result is SKIPPED</small></summary>
         <table>
-            <tr><th>Test</th><th>Bundle</th><th>Date</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            <colgroup>
+                <col style="width: 65%">
+                <col style="width: 15%">
+                <col style="width: 12%">
+                {% if rp_url %}<col style="width: 8%">{% endif %}
+            </colgroup>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Bundle</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Date</th>{% if rp_url %}<th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Log</th>{% endif %}</tr></thead>
+            <tbody>
             {% for item in team.skipped_items %}
-            <tr>
-                <td class="mono">{{ item.node_id }}</td>
-                <td>{{ item.bundle | default('-') }}</td>
-                <td>{{ item.last_executed | default('-') }}</td>
-                {% if rp_url %}
-                <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
-                {% endif %}
-            </tr>
+            {{ bundle_date_row(item, rp_url) }}
             {% endfor %}
+            </tbody>
         </table>
     </details>
     {% endif %}

@@ -81,6 +81,58 @@
 
         /* RP log link */
         .rp-link { text-decoration: none; }
+
+        /* Stable column layout */
+        details > table {
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        /* Test name column: truncate with ellipsis */
+        details td.mono {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 0; /* needed for table-layout:fixed truncation */
+        }
+
+        /* Param count badge */
+        .param-count {
+            color: #666;
+            font-weight: normal;
+            font-size: 0.85em;
+            margin-left: 0.5em;
+        }
+
+        /* Param sub-table */
+        .param-table {
+            margin: 0;
+            border: none;
+            table-layout: fixed;
+            width: 100%;
+        }
+        .param-table td {
+            padding: 2px 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        /* Group row */
+        .group-row td {
+            padding: 0;
+        }
+        .group-row details {
+            border: none;
+            margin: 0;
+        }
+        .group-row summary {
+            padding: 4px 10px;
+            border: none;
+        }
+
+        /* Sort indicators */
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: #e8e8e8; }
+        .sort-indicator { margin-left: 4px; font-size: 0.8em; }
     </style>
     <script>
         function openTab(evt, tabName) {
@@ -88,6 +140,41 @@
             document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
             document.getElementById(tabName).classList.add('active');
             evt.currentTarget.classList.add('active');
+        }
+
+        function sortTable(tableEl, colIdx) {
+            var tbody = tableEl.tBodies[0];
+            if (!tbody) return;
+            var rows = Array.from(tbody.querySelectorAll(':scope > tr'));
+            var th = tableEl.tHead.rows[0].cells[colIdx];
+            var asc = th.getAttribute('data-sort-dir') !== 'asc';
+            th.setAttribute('data-sort-dir', asc ? 'asc' : 'desc');
+
+            // Clear all sort indicators in this table
+            tableEl.querySelectorAll('.sort-indicator').forEach(function(el) { el.remove(); });
+            tableEl.querySelectorAll('th').forEach(function(h) { h.removeAttribute('data-sort-dir'); });
+            th.setAttribute('data-sort-dir', asc ? 'asc' : 'desc');
+            var indicator = document.createElement('span');
+            indicator.className = 'sort-indicator';
+            indicator.textContent = asc ? '▲' : '▼';
+            th.appendChild(indicator);
+
+            rows.sort(function(a, b) {
+                // For group rows the text is inside a summary/details
+                var aCell = a.cells[colIdx];
+                var bCell = b.cells[colIdx];
+                var aText = aCell ? (aCell.querySelector('summary') || aCell).textContent.trim().toLowerCase() : '';
+                var bText = bCell ? (bCell.querySelector('summary') || bCell).textContent.trim().toLowerCase() : '';
+                var aNum = parseFloat(aText);
+                var bNum = parseFloat(bText);
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return asc ? aNum - bNum : bNum - aNum;
+                }
+                if (aText < bText) return asc ? -1 : 1;
+                if (aText > bText) return asc ? 1 : -1;
+                return 0;
+            });
+            rows.forEach(function(row) { tbody.appendChild(row); });
         }
     </script>
 </head>
