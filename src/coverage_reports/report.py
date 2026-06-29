@@ -138,17 +138,6 @@ def _sort_and_group(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return _group_parameterized_items(items=sorted(items, key=_NODE_ID_KEY))
 
 
-def _flatten_grouped_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Flatten grouped items back to individual items for re-aggregation."""
-    result = []
-    for item in items:
-        if item.get("is_group"):
-            result.extend(item["group_items"])
-        else:
-            result.append(item)
-    return result
-
-
 def _parse_param_dimensions(param_str: str) -> list[str] | None:
     """Parse multi-dimensional parameter string into dimension values.
 
@@ -186,15 +175,14 @@ def _detect_matrix(
     """
     params: list[dict[str, Any]] = []
     for sub in group_items:
-        param_part = sub["node_id"][len(base_name):]
+        param_part = sub["node_id"][len(base_name) :]
         param_str = param_part.strip("[]")
         dims = _parse_param_dimensions(param_str)
         if dims:
             params.append({"dims": dims, "item": sub})
 
-    if (
-        len(params) == len(group_items)
-        and all(len(p["dims"]) == len(params[0]["dims"]) for p in params)
+    if len(params) == len(group_items) and all(
+        len(p["dims"]) == len(params[0]["dims"]) for p in params
     ):
         num_dims = len(params[0]["dims"])
         if num_dims == 2:
@@ -204,9 +192,7 @@ def _detect_matrix(
             # Nested dict for Jinja2 compatibility (no tuple keys)
             matrix_cells: dict[str, dict[str, dict[str, Any]]] = {}
             for p in params:
-                matrix_cells.setdefault(p["dims"][0], {})[p["dims"][1]] = p[
-                    "item"
-                ]
+                matrix_cells.setdefault(p["dims"][0], {})[p["dims"][1]] = p["item"]
 
             return {
                 "is_matrix": True,
@@ -235,6 +221,9 @@ def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, An
 
     for item in items:
         node_id: str = item["node_id"]
+        # Already grouped (from cross-section grouping) — pass through
+        if item.get("is_group"):
+            continue
         bracket = node_id.find("[")
         if bracket != -1:
             base_name = node_id[:bracket]
@@ -245,6 +234,13 @@ def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, An
 
     for item in items:
         node_id = item["node_id"]
+        # Already grouped (from cross-section grouping) — pass through.
+        # Group items have node_id == base_name (no bracket).
+        if item.get("is_group"):
+            if node_id not in seen_bases:
+                seen_bases.add(node_id)
+                result.append(item)
+            continue
         bracket = node_id.find("[")
         if bracket != -1:
             base_name = node_id[:bracket]
@@ -253,36 +249,9 @@ def _group_parameterized_items(items: list[dict[str, Any]]) -> list[dict[str, An
             seen_bases.add(base_name)
             group_items = groups[base_name]
             if len(group_items) >= 2:
-                # Build status counts
-                status_counts: dict[str, int] = {}
-                for sub in group_items:
-                    s = sub.get("status", "UNKNOWN")
-                    status_counts[s] = status_counts.get(s, 0) + 1
-
-                group_item: dict[str, Any] = {
-                    **group_items[0],
-                    "node_id": base_name,
-                    "is_group": True,
-                    "group_count": len(group_items),
-                    "group_items": group_items,
-                    "bundle": None,
-                    "last_executed": None,
-                    "launch_id": None,
-                    "item_id": None,
-                    "defect_type": None,
-                    "defect_comment": None,
-                    "source": None,
-                    "is_manual": any(sub.get("is_manual") for sub in group_items),
-                    "comment_urls": [],
-                    "status_counts": status_counts,
-                }
-
-                matrix_info = _detect_matrix(
-                    group_items=group_items, base_name=base_name
+                result.append(
+                    _build_group_item(group_items=group_items, base_name=base_name)
                 )
-                group_item.update(matrix_info)
-
-                result.append(group_item)
             else:
                 single = {**group_items[0], "is_group": False, "is_matrix": False}
                 result.append(single)
@@ -375,6 +344,77 @@ def _test_info_to_template_item(test_info: TestInfo) -> dict[str, Any]:
     }
 
 
+def _build_group_item(
+    group_items: list[dict[str, Any]],
+    base_name: str,
+) -> dict[str, Any]:
+    """Build a parameterized group item from individual variant items.
+
+    Args:
+        group_items: Individual test items sharing the same base name.
+        base_name: Common prefix before the ``[`` bracket.
+
+    Returns:
+        Group dict with matrix detection, status counts, and metadata.
+    """
+    status_counts: dict[str, int] = {}
+    for sub in group_items:
+        s = sub.get("status", "UNKNOWN")
+        status_counts[s] = status_counts.get(s, 0) + 1
+
+    group_item: dict[str, Any] = {
+        "node_id": base_name,
+        "status": "MIXED",
+        "status_css": "",
+        "status_label": "MIXED",
+        "is_group": True,
+        "group_count": len(group_items),
+        "group_items": group_items,
+        "bundle": None,
+        "last_executed": None,
+        "launch_name": None,
+        "launch_id": None,
+        "item_id": None,
+        "defect_type": None,
+        "defect_comment": None,
+        "source": None,
+        "is_manual": any(sub.get("is_manual") for sub in group_items),
+        "comment_urls": [],
+        "quarantine_reason": None,
+        "quarantine_jira": None,
+        "status_counts": status_counts,
+    }
+
+    matrix_info = _detect_matrix(group_items=group_items, base_name=base_name)
+    group_item.update(matrix_info)
+    return group_item
+
+
+def _matrix_primary_section(
+    status_counts: dict[str, int],
+) -> str:
+    """Determine which section a parameterized test primarily belongs to.
+
+    Priority: failed > stale > never_executed > skipped > passed.
+
+    Args:
+        status_counts: Dict mapping status to count of variants.
+
+    Returns:
+        Section name: "failed", "stale", "never_executed",
+        "skipped", or "passed".
+    """
+    if status_counts.get("FAILED"):
+        return "failed"
+    if status_counts.get("STALE"):
+        return "stale"
+    if status_counts.get("NEVER_EXECUTED"):
+        return "never_executed"
+    if status_counts.get("SKIPPED"):
+        return "skipped"
+    return "passed"
+
+
 def _build_team_data(
     team_name: str,
     tests: list[TestInfo],
@@ -429,11 +469,13 @@ def _build_team_data(
                 pass
 
         if is_stale:
-            stale_items.append(_result_to_template_item(
-                node_id=test.node_id,
-                result=result,
-                status_override="STALE",
-            ))
+            stale_items.append(
+                _result_to_template_item(
+                    node_id=test.node_id,
+                    result=result,
+                    status_override="STALE",
+                )
+            )
             continue
 
         status_upper = result.status.upper()
@@ -450,8 +492,74 @@ def _build_team_data(
     passed_count = len(passed_items)
     failed_count = len(failed_items)
     skipped_count = len(skipped_items)
+    never_executed_count = len(never_executed_items)
+    stale_count = len(stale_items)
+    quarantined_count = len(quarantined_items)
     executed = passed_count + failed_count + skipped_count
     coverage_pct = (executed / total * 100) if total > 0 else 0.0
+
+    # --- Parameterized test cross-section grouping ---
+    # Note: quarantined_items excluded — quarantined tests are filtered out
+    # early in the classification loop and never placed in other sections,
+    # so they cannot have parameterized siblings across sections.
+    param_groups: dict[str, list[dict[str, Any]]] = {}
+    for section_items in [
+        passed_items,
+        failed_items,
+        skipped_items,
+        stale_items,
+        never_executed_items,
+    ]:
+        for item in section_items:
+            node_id = item["node_id"]
+            bracket = node_id.find("[")
+            if bracket != -1:
+                base = node_id[:bracket]
+                param_groups.setdefault(base, []).append(item)
+
+    # For groups with 2+ variants, consolidate into primary section
+    all_variant_ids: set[str] = set()
+    groups_by_section: dict[str, list[dict[str, Any]]] = {}
+
+    for base, variants in param_groups.items():
+        if len(variants) < 2:
+            continue
+
+        group_items = sorted(variants, key=lambda x: x["node_id"])
+        group_item = _build_group_item(group_items=group_items, base_name=base)
+        primary = _matrix_primary_section(status_counts=group_item["status_counts"])
+
+        all_variant_ids.update(item["node_id"] for item in variants)
+        groups_by_section.setdefault(primary, []).append(group_item)
+
+    # Single-pass removal across all sections
+    if all_variant_ids:
+        passed_items[:] = [
+            i for i in passed_items if i["node_id"] not in all_variant_ids
+        ]
+        failed_items[:] = [
+            i for i in failed_items if i["node_id"] not in all_variant_ids
+        ]
+        skipped_items[:] = [
+            i for i in skipped_items if i["node_id"] not in all_variant_ids
+        ]
+        stale_items[:] = [i for i in stale_items if i["node_id"] not in all_variant_ids]
+        never_executed_items[:] = [
+            i for i in never_executed_items if i["node_id"] not in all_variant_ids
+        ]
+
+    # Add groups to their primary sections
+    section_map = {
+        "passed": passed_items,
+        "failed": failed_items,
+        "skipped": skipped_items,
+        "stale": stale_items,
+        "never_executed": never_executed_items,
+    }
+    for section, groups in groups_by_section.items():
+        if section in section_map:
+            section_map[section].extend(groups)
+    # --- End cross-section grouping ---
 
     return TeamReportData(
         name=team_name,
@@ -459,9 +567,9 @@ def _build_team_data(
         passed=passed_count,
         failed=failed_count,
         skipped=skipped_count,
-        never_executed=len(never_executed_items),
-        stale=len(stale_items),
-        quarantined=len(quarantined_items),
+        never_executed=never_executed_count,
+        stale=stale_count,
+        quarantined=quarantined_count,
         coverage_pct=round(coverage_pct, 1),
         failed_items=_sort_and_group(items=failed_items),
         stale_items=_sort_and_group(items=stale_items),
@@ -559,20 +667,20 @@ def render_version_report(
     all_gating: list[dict[str, Any]] = []
 
     for td in team_data_list:
-        all_failed.extend(_flatten_grouped_items(items=td.failed_items))
-        all_stale.extend(_flatten_grouped_items(items=td.stale_items))
-        all_quarantined.extend(_flatten_grouped_items(items=td.quarantined_items))
-        all_never.extend(_flatten_grouped_items(items=td.never_executed_items))
-        all_passed.extend(_flatten_grouped_items(items=td.passed_items))
-        all_skipped.extend(_flatten_grouped_items(items=td.skipped_items))
+        all_failed.extend(td.failed_items)
+        all_stale.extend(td.stale_items)
+        all_quarantined.extend(td.quarantined_items)
+        all_never.extend(td.never_executed_items)
+        all_passed.extend(td.passed_items)
+        all_skipped.extend(td.skipped_items)
 
-    # Apply parameterized grouping to the aggregated lists
-    all_failed = _sort_and_group(items=all_failed)
-    all_stale = _sort_and_group(items=all_stale)
-    all_quarantined = _sort_and_group(items=all_quarantined)
-    all_never = _sort_and_group(items=all_never)
-    all_passed = _sort_and_group(items=all_passed)
-    all_skipped = _sort_and_group(items=all_skipped)
+    # Sort aggregated lists (groups are already built per-team)
+    all_failed.sort(key=_NODE_ID_KEY)
+    all_stale.sort(key=_NODE_ID_KEY)
+    all_quarantined.sort(key=_NODE_ID_KEY)
+    all_never.sort(key=_NODE_ID_KEY)
+    all_passed.sort(key=_NODE_ID_KEY)
+    all_skipped.sort(key=_NODE_ID_KEY)
 
     # Identify gating gaps (never-executed or stale gating tests)
     gating_node_ids = {test.node_id for test in tests if test.is_gating}
@@ -633,21 +741,31 @@ def render_version_report(
         for rec in display_analysis:
             if rec.tier not in total_by_tier:
                 total_by_tier[rec.tier] = {
-                    "launches": 0, "total": 0, "passed": 0, "failed": 0,
-                    "skipped": 0, "analyzed": 0, "to_investigate": 0,
-                    "product_bug": 0, "automation_bug": 0, "system_issue": 0, "no_defect": 0,
+                    "launches": 0,
+                    "total": 0,
+                    "passed": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "analyzed": 0,
+                    "to_investigate": 0,
+                    "product_bug": 0,
+                    "automation_bug": 0,
+                    "system_issue": 0,
+                    "no_defect": 0,
                 }
             for counter_field in total_by_tier[rec.tier]:
                 total_by_tier[rec.tier][counter_field] += getattr(rec, counter_field)
         for tier, counters in sorted(total_by_tier.items()):
-            display_analysis.append(LaunchAnalysisRecord(
-                bundle="ALL",
-                team="TOTAL",
-                display_team="TOTAL",
-                tier=tier,
-                arch="all",
-                **counters,
-            ))
+            display_analysis.append(
+                LaunchAnalysisRecord(
+                    bundle="ALL",
+                    team="TOTAL",
+                    display_team="TOTAL",
+                    tier=tier,
+                    arch="all",
+                    **counters,
+                )
+            )
 
     generated_at = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
     report_filename = f"report_{version}.html"
@@ -669,7 +787,9 @@ def render_version_report(
             team = test.team or _get_team_from_node_id(node_id=test.node_id)
             if team_aliases and team in team_aliases:
                 team = team_aliases[team]
-            manual_by_team.setdefault(team, []).append(_test_info_to_template_item(test_info=test))
+            manual_by_team.setdefault(team, []).append(
+                _test_info_to_template_item(test_info=test)
+            )
 
     html = template.render(
         version=version,
@@ -690,25 +810,28 @@ def render_version_report(
             "quarantined": total_quarantined,
             "coverage_pct": round(coverage_pct, 1),
         },
-        teams=[{
-            "name": td.name,
-            "total": td.total,
-            "passed": td.passed,
-            "failed": td.failed,
-            "skipped": td.skipped,
-            "never_executed": td.never_executed,
-            "stale": td.stale,
-            "quarantined": td.quarantined,
-            "coverage_pct": td.coverage_pct,
-            "gating_items": _sort_and_group(items=gating_by_team.get(td.name, [])),
-            "failed_items": td.failed_items,
-            "stale_items": td.stale_items,
-            "quarantined_items": td.quarantined_items,
-            "manual_items": _sort_and_group(items=manual_by_team.get(td.name, [])),
-            "never_executed_items": td.never_executed_items,
-            "passed_items": td.passed_items,
-            "skipped_items": td.skipped_items,
-        } for td in team_data_list],
+        teams=[
+            {
+                "name": td.name,
+                "total": td.total,
+                "passed": td.passed,
+                "failed": td.failed,
+                "skipped": td.skipped,
+                "never_executed": td.never_executed,
+                "stale": td.stale,
+                "quarantined": td.quarantined,
+                "coverage_pct": td.coverage_pct,
+                "gating_items": _sort_and_group(items=gating_by_team.get(td.name, [])),
+                "failed_items": td.failed_items,
+                "stale_items": td.stale_items,
+                "quarantined_items": td.quarantined_items,
+                "manual_items": _sort_and_group(items=manual_by_team.get(td.name, [])),
+                "never_executed_items": td.never_executed_items,
+                "passed_items": td.passed_items,
+                "skipped_items": td.skipped_items,
+            }
+            for td in team_data_list
+        ],
         analysis_records=display_analysis,
         rp_url=rp_url.rstrip("/"),
         rp_project=rp_project,
@@ -748,23 +871,25 @@ def render_index(
 
     repos = []
     for repo_name, versions in repo_versions.items():
-        repos.append({
-            "name": repo_name,
-            "versions": [
-                {
-                    "version": ver.version,
-                    "branch": ver.branch,
-                    "total_tests": ver.total_tests,
-                    "passed": ver.passed,
-                    "failed": ver.failed,
-                    "never_executed": ver.never_executed,
-                    "quarantined": ver.quarantined,
-                    "coverage_pct": ver.coverage_pct,
-                    "report_path": ver.report_filename,
-                }
-                for ver in versions
-            ],
-        })
+        repos.append(
+            {
+                "name": repo_name,
+                "versions": [
+                    {
+                        "version": ver.version,
+                        "branch": ver.branch,
+                        "total_tests": ver.total_tests,
+                        "passed": ver.passed,
+                        "failed": ver.failed,
+                        "never_executed": ver.never_executed,
+                        "quarantined": ver.quarantined,
+                        "coverage_pct": ver.coverage_pct,
+                        "report_path": ver.report_filename,
+                    }
+                    for ver in versions
+                ],
+            }
+        )
 
     return template.render(repos=repos, generated_at=generated_at)
 
