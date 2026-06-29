@@ -217,8 +217,8 @@ def aggregate_analysis_by_display_team(
 ) -> dict[str, list[LaunchAnalysisRecord]]:
     """Aggregate analysis records by display team, summing across bundles.
 
-    Groups by the collapsed display team name and tier. Each display
-    team gets one row per tier (Gating, All).
+    Groups by the collapsed display team name, tier, and architecture.
+    Each display team gets one row per (tier, arch) combination.
 
     Args:
         records: List of LaunchAnalysisRecord to aggregate.
@@ -227,10 +227,10 @@ def aggregate_analysis_by_display_team(
         Dict mapping display team name to list of aggregated records,
         sorted by team name.
     """
-    stats_accumulator: dict[tuple[str, str], dict[str, int]] = {}
+    stats_accumulator: dict[tuple[str, str, str], dict[str, int]] = {}
 
     for record in records:
-        key = (record.display_team, record.tier)
+        key = (record.display_team, record.tier, record.arch)
         if key not in stats_accumulator:
             stats_accumulator[key] = _new_counters()
         counters = stats_accumulator[key]
@@ -238,7 +238,7 @@ def aggregate_analysis_by_display_team(
             counters[field_name] += getattr(record, field_name)
 
     grouped: dict[str, list[LaunchAnalysisRecord]] = {}
-    for (display_team, tier), counters in sorted(stats_accumulator.items()):
+    for (display_team, tier, arch), counters in sorted(stats_accumulator.items()):
         analyzed = (
             counters["product_bug"]
             + counters["automation_bug"]
@@ -250,7 +250,7 @@ def aggregate_analysis_by_display_team(
             team=display_team,
             display_team=display_team,
             tier=tier,
-            arch="all",
+            arch=arch,
             launches=counters["launches"],
             total=counters["total"],
             passed=counters["passed"],

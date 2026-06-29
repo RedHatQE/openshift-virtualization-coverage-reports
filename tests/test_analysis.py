@@ -160,6 +160,7 @@ class TestAggregateByDisplayTeam:
         assert virt_gating.launches == 3
         assert virt_gating.total == 150
         assert virt_gating.failed == 12
+        assert virt_gating.arch == "amd64"
 
     def test_preserves_tiers(self) -> None:
         records = [
@@ -182,3 +183,31 @@ class TestAggregateByDisplayTeam:
         assert len(grouped["Network"]) == 2
         tiers = {rec.tier for rec in grouped["Network"]}
         assert tiers == {"Gating", "All"}
+
+    def test_preserves_arch_dimension(self) -> None:
+        """Records with different arch values should not be collapsed together."""
+        records = [
+            LaunchAnalysisRecord(
+                bundle="v4.22.0", team="NETWORK", display_team="Network",
+                tier="Gating", arch="amd64", launches=2, total=100,
+                passed=90, failed=8, skipped=2, analyzed=6,
+                to_investigate=2, product_bug=3, automation_bug=2,
+                system_issue=1, no_defect=0,
+            ),
+            LaunchAnalysisRecord(
+                bundle="v4.22.0", team="NETWORK", display_team="Network",
+                tier="Gating", arch="s390x", launches=1, total=50,
+                passed=45, failed=4, skipped=1, analyzed=3,
+                to_investigate=1, product_bug=1, automation_bug=1,
+                system_issue=1, no_defect=0,
+            ),
+        ]
+        grouped = aggregate_analysis_by_display_team(records=records)
+        assert "Network" in grouped
+        assert len(grouped["Network"]) == 2
+        arches = {rec.arch for rec in grouped["Network"]}
+        assert arches == {"amd64", "s390x"}
+        amd64_rec = [rec for rec in grouped["Network"] if rec.arch == "amd64"][0]
+        assert amd64_rec.total == 100
+        s390x_rec = [rec for rec in grouped["Network"] if rec.arch == "s390x"][0]
+        assert s390x_rec.total == 50
