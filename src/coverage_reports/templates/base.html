@@ -88,6 +88,7 @@
         details > table {
             table-layout: fixed;
             width: 100%;
+            overflow: hidden;
         }
 
         /* Test name column: truncate with ellipsis */
@@ -121,14 +122,22 @@
         /* Group row */
         .group-row td {
             padding: 0;
+            max-width: 0; /* forces td to shrink so text-overflow works on inner summary */
+            overflow: hidden;
         }
         .group-row details {
             border: none;
             margin: 0;
+            overflow: hidden;
         }
         .group-row summary {
             padding: 4px 10px;
             border: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+            display: block;
         }
 
         /* Sort indicators */

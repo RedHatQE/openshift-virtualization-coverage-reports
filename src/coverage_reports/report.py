@@ -736,11 +736,12 @@ def render_version_report(
         grouped = aggregate_analysis_by_display_team(records=analysis_records)
         for _team, recs in sorted(grouped.items()):
             display_analysis.extend(recs)
-        # Add total rows
-        total_by_tier: dict[str, dict[str, int]] = {}
+        # Add total rows (per tier + arch)
+        total_by_tier_arch: dict[tuple[str, str], dict[str, int]] = {}
         for rec in display_analysis:
-            if rec.tier not in total_by_tier:
-                total_by_tier[rec.tier] = {
+            key = (rec.tier, rec.arch)
+            if key not in total_by_tier_arch:
+                total_by_tier_arch[key] = {
                     "launches": 0,
                     "total": 0,
                     "passed": 0,
@@ -753,16 +754,16 @@ def render_version_report(
                     "system_issue": 0,
                     "no_defect": 0,
                 }
-            for counter_field in total_by_tier[rec.tier]:
-                total_by_tier[rec.tier][counter_field] += getattr(rec, counter_field)
-        for tier, counters in sorted(total_by_tier.items()):
+            for counter_field in total_by_tier_arch[key]:
+                total_by_tier_arch[key][counter_field] += getattr(rec, counter_field)
+        for (tier, arch), counters in sorted(total_by_tier_arch.items()):
             display_analysis.append(
                 LaunchAnalysisRecord(
                     bundle="ALL",
                     team="TOTAL",
                     display_team="TOTAL",
                     tier=tier,
-                    arch="all",
+                    arch=arch,
                     **counters,
                 )
             )
