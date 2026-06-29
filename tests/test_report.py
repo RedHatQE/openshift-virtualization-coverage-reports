@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from datetime import UTC, datetime, timedelta
 
 from coverage_reports.collectors.base import TestInfo
@@ -13,6 +11,7 @@ from coverage_reports.report import (
     _extract_urls,
     _get_team_from_node_id,
     _group_parameterized_items,
+    _matrix_primary_section,
     _parse_param_dimensions,
     render_index,
     render_version_report,
@@ -27,10 +26,18 @@ class TestGetTeamFromNodeId:
     """Tests for team extraction from node IDs."""
 
     def test_standard_path(self) -> None:
-        assert _get_team_from_node_id(node_id="tests/network/test_foo.py::test_bar") == "network"
+        assert (
+            _get_team_from_node_id(node_id="tests/network/test_foo.py::test_bar")
+            == "network"
+        )
 
     def test_nested_path(self) -> None:
-        assert _get_team_from_node_id(node_id="tests/virt/migration/test_live.py::TestMigrate::test_it") == "virt"
+        assert (
+            _get_team_from_node_id(
+                node_id="tests/virt/migration/test_live.py::TestMigrate::test_it"
+            )
+            == "virt"
+        )
 
     def test_no_tests_prefix(self) -> None:
         assert _get_team_from_node_id(node_id="other/path/test.py::test_x") == "other"
@@ -53,9 +60,21 @@ class TestGroupParameterizedItems:
 
     def test_groups_parameterized(self) -> None:
         items = [
-            {"node_id": "tests/net/test_a.py::test_foo[param1]", "status": "PASSED", "bundle": "b1"},
-            {"node_id": "tests/net/test_a.py::test_foo[param2]", "status": "PASSED", "bundle": "b1"},
-            {"node_id": "tests/net/test_a.py::test_foo[param3]", "status": "FAILED", "bundle": "b2"},
+            {
+                "node_id": "tests/net/test_a.py::test_foo[param1]",
+                "status": "PASSED",
+                "bundle": "b1",
+            },
+            {
+                "node_id": "tests/net/test_a.py::test_foo[param2]",
+                "status": "PASSED",
+                "bundle": "b1",
+            },
+            {
+                "node_id": "tests/net/test_a.py::test_foo[param3]",
+                "status": "FAILED",
+                "bundle": "b2",
+            },
         ]
         result = _group_parameterized_items(items=items)
         assert len(result) == 1
@@ -76,8 +95,16 @@ class TestGroupParameterizedItems:
     def test_mixed_grouped_and_plain(self) -> None:
         items = [
             {"node_id": "tests/test_a.py::test_bar", "status": "PASSED"},
-            {"node_id": "tests/test_a.py::test_foo[p1]", "status": "PASSED", "bundle": "b"},
-            {"node_id": "tests/test_a.py::test_foo[p2]", "status": "FAILED", "bundle": "b"},
+            {
+                "node_id": "tests/test_a.py::test_foo[p1]",
+                "status": "PASSED",
+                "bundle": "b",
+            },
+            {
+                "node_id": "tests/test_a.py::test_foo[p2]",
+                "status": "FAILED",
+                "bundle": "b",
+            },
         ]
         result = _group_parameterized_items(items=items)
         assert len(result) == 2
@@ -96,6 +123,195 @@ class TestGroupParameterizedItems:
         assert len(result) == 2
         assert result[0]["node_id"] == "tests/b.py::test_b"
         assert result[1]["node_id"] == "tests/a.py::test_a"
+
+
+class TestMatrixPrimarySection:
+    """Tests for _matrix_primary_section."""
+
+    def test_all_passed(self) -> None:
+        assert _matrix_primary_section(status_counts={"PASSED": 3}) == "passed"
+
+    def test_failed_takes_priority(self) -> None:
+        assert (
+            _matrix_primary_section(status_counts={"PASSED": 2, "FAILED": 1})
+            == "failed"
+        )
+
+    def test_stale_over_never_executed(self) -> None:
+        assert (
+            _matrix_primary_section(status_counts={"STALE": 1, "NEVER_EXECUTED": 2})
+            == "stale"
+        )
+
+    def test_never_executed_over_skipped(self) -> None:
+        assert (
+            _matrix_primary_section(status_counts={"NEVER_EXECUTED": 1, "SKIPPED": 1})
+            == "never_executed"
+        )
+
+    def test_skipped_over_passed(self) -> None:
+        assert (
+            _matrix_primary_section(status_counts={"SKIPPED": 1, "PASSED": 5})
+            == "skipped"
+        )
+
+    def test_empty_counts_returns_passed(self) -> None:
+        assert _matrix_primary_section(status_counts={}) == "passed"
+
+
+class TestCrossSectionGrouping:
+    """Tests for cross-section parameterized test grouping in _build_team_data."""
+
+    def test_mixed_status_params_grouped_in_primary_section(self) -> None:
+        """Parameterized test with 2 passed + 1 never-executed should appear only in never_executed."""
+        tests = [
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[a]", team="network"
+            ),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[b]", team="network"
+            ),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[c]", team="network"
+            ),
+        ]
+        rp_results = {
+            "tests.network.test_foo.test_param[a]": ItemResult(
+                name="tests.network.test_foo.test_param[a]",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=10,
+            ),
+            "tests.network.test_foo.test_param[b]": ItemResult(
+                name="tests.network.test_foo.test_param[b]",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=11,
+            ),
+            # test_param[c] has no RP result -> NEVER_EXECUTED
+        }
+
+        html, ver_data = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+        )
+
+        # All 3 variants should be in the group
+        assert "3 params" in html
+        # Counts should reflect individual test statuses
+        assert ver_data.passed == 2
+        assert ver_data.never_executed >= 1
+
+    def test_all_passed_params_stay_in_passed(self) -> None:
+        """When all variants pass, group should be in passed section."""
+        tests = [
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[a]", team="network"
+            ),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[b]", team="network"
+            ),
+        ]
+        rp_results = {
+            "tests.network.test_foo.test_param[a]": ItemResult(
+                name="tests.network.test_foo.test_param[a]",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=10,
+            ),
+            "tests.network.test_foo.test_param[b]": ItemResult(
+                name="tests.network.test_foo.test_param[b]",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=11,
+            ),
+        }
+
+        html, ver_data = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+        )
+
+        assert "2 params" in html
+        assert ver_data.passed == 2
+        assert ver_data.failed == 0
+        assert ver_data.never_executed == 0
+
+    def test_failed_variant_promotes_group_to_failed(self) -> None:
+        """A single failed variant should move the entire group to failed section."""
+        tests = [
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[a]", team="network"
+            ),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[b]", team="network"
+            ),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[c]", team="network"
+            ),
+        ]
+        rp_results = {
+            "tests.network.test_foo.test_param[a]": ItemResult(
+                name="tests.network.test_foo.test_param[a]",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=10,
+            ),
+            "tests.network.test_foo.test_param[b]": ItemResult(
+                name="tests.network.test_foo.test_param[b]",
+                status="FAILED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=11,
+            ),
+            "tests.network.test_foo.test_param[c]": ItemResult(
+                name="tests.network.test_foo.test_param[c]",
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=12,
+            ),
+        }
+
+        _html, ver_data = render_version_report(
+            version="4.22",
+            branch="cnv-4.22",
+            repo_name="test-repo",
+            tests=tests,
+            rp_results=rp_results,
+            stale_days=30,
+        )
+
+        # Individual counts still track per-test
+        assert ver_data.passed == 2
+        assert ver_data.failed == 1
 
 
 class TestParseParamDimensions:
@@ -266,25 +482,43 @@ class TestRenderVersionReport:
 
     def test_parameterized_tests_grouped_in_html(self) -> None:
         tests = [
-            TestInfo(node_id="tests/network/test_foo.py::test_param[a]", team="network"),
-            TestInfo(node_id="tests/network/test_foo.py::test_param[b]", team="network"),
-            TestInfo(node_id="tests/network/test_foo.py::test_param[c]", team="network"),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[a]", team="network"
+            ),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[b]", team="network"
+            ),
+            TestInfo(
+                node_id="tests/network/test_foo.py::test_param[c]", team="network"
+            ),
         ]
         rp_results = {
             "tests.network.test_foo.test_param[a]": ItemResult(
                 name="tests.network.test_foo.test_param[a]",
-                status="PASSED", last_executed=_RECENT_TS,
-                bundle="v4.22.0", launch_name="run", launch_id=1, item_id=10,
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=10,
             ),
             "tests.network.test_foo.test_param[b]": ItemResult(
                 name="tests.network.test_foo.test_param[b]",
-                status="PASSED", last_executed=_RECENT_TS,
-                bundle="v4.22.0", launch_name="run", launch_id=1, item_id=11,
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=11,
             ),
             "tests.network.test_foo.test_param[c]": ItemResult(
                 name="tests.network.test_foo.test_param[c]",
-                status="PASSED", last_executed=_RECENT_TS,
-                bundle="v4.22.0", launch_name="run", launch_id=1, item_id=12,
+                status="PASSED",
+                last_executed=_RECENT_TS,
+                bundle="v4.22.0",
+                launch_name="run",
+                launch_id=1,
+                item_id=12,
             ),
         }
 
@@ -314,7 +548,10 @@ class TestTeamAliases:
 
     def test_alias_resolves_team(self) -> None:
         tests = [
-            TestInfo(node_id="tests/observability/test_metrics.py::test_metric", team="observability"),
+            TestInfo(
+                node_id="tests/observability/test_metrics.py::test_metric",
+                team="observability",
+            ),
         ]
         rp_results = {
             "tests.observability.test_metrics.test_metric": ItemResult(
@@ -460,16 +697,30 @@ class TestRenderIndex:
         repo_versions = {
             "test-repo": [
                 VersionReportData(
-                    version="4.22", branch="cnv-4.22", repo_name="test-repo",
-                    total_tests=1000, passed=800, failed=50,
-                    never_executed=100, stale=30, quarantined=20,
-                    coverage_pct=85.0, report_filename="report_4.22.html",
+                    version="4.22",
+                    branch="cnv-4.22",
+                    repo_name="test-repo",
+                    total_tests=1000,
+                    passed=800,
+                    failed=50,
+                    never_executed=100,
+                    stale=30,
+                    quarantined=20,
+                    coverage_pct=85.0,
+                    report_filename="report_4.22.html",
                 ),
                 VersionReportData(
-                    version="4.99", branch="main", repo_name="test-repo",
-                    total_tests=1100, passed=900, failed=40,
-                    never_executed=120, stale=20, quarantined=20,
-                    coverage_pct=87.3, report_filename="report_4.99.html",
+                    version="4.99",
+                    branch="main",
+                    repo_name="test-repo",
+                    total_tests=1100,
+                    passed=900,
+                    failed=40,
+                    never_executed=120,
+                    stale=20,
+                    quarantined=20,
+                    coverage_pct=87.3,
+                    report_filename="report_4.99.html",
                 ),
             ],
         }
@@ -494,7 +745,9 @@ class TestExtractUrls:
         assert _extract_urls("plain text without urls") == []
 
     def test_single_url(self) -> None:
-        assert _extract_urls("see https://example.com/path") == ["https://example.com/path"]
+        assert _extract_urls("see https://example.com/path") == [
+            "https://example.com/path"
+        ]
 
     def test_multiple_urls(self) -> None:
         text = "links: https://a.com and http://b.org/page"
@@ -513,7 +766,9 @@ class TestExtractUrls:
         assert _extract_urls("ref: https://example.com:") == ["https://example.com"]
 
     def test_url_with_port_preserved(self) -> None:
-        assert _extract_urls("at https://example.com:8080/path") == ["https://example.com:8080/path"]
+        assert _extract_urls("at https://example.com:8080/path") == [
+            "https://example.com:8080/path"
+        ]
 
     def test_url_with_query_params(self) -> None:
         assert _extract_urls("https://example.com/path?key=value&other=1") == [
