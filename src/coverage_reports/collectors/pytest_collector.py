@@ -23,6 +23,46 @@ LOGGER = logging.getLogger(__name__)
 _CNV_JIRA_PATTERN = re.compile(pattern=r"CNV-\d+")
 
 
+def _is_test_false_assign(node: ast.AST) -> bool:
+    """Check if node is ``__test__ = False`` (simple name assignment)."""
+    return (
+        isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "__test__"
+            for target in node.targets
+        )
+        and isinstance(node.value, ast.Constant)
+        and node.value.value is False
+    )
+
+
+def _is_attr_test_false(node: ast.AST) -> str | None:
+    """Check if node is ``name.__test__ = False`` (attribute assignment).
+
+    Returns the name being disabled, or None if not a match.
+    """
+    if (
+        isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Attribute)
+        and node.targets[0].attr == "__test__"
+        and isinstance(node.targets[0].value, ast.Name)
+        and isinstance(node.value, ast.Constant)
+        and node.value.value is False
+    ):
+        return node.targets[0].value.id
+    return None
+
+
+def _manual_test_info(node_id: str) -> TestInfo:
+    """Create a TestInfo for a manual/STD placeholder test."""
+    return TestInfo(
+        node_id=node_id,
+        team=_get_team_from_node_id(node_id=node_id),
+        is_manual=True,
+    )
+
+
 def clone_repo(
     url: str,
     branch: str,
@@ -398,7 +438,10 @@ def _scan_quarantined_tests(tests_path: Path, repo_path: Path) -> list[TestInfo]
 def _scan_manual_tests(tests_path: Path, repo_path: Path) -> list[TestInfo]:
     """Scan test files for manual (STD placeholder) tests.
 
-    Identifies tests in classes with ``__test__ = False``.
+    Identifies tests disabled via ``__test__ = False`` at three levels:
+    module-level (disables all tests in the file), class-level (disables
+    all methods in the class), and function-level (``func.__test__ = False``
+    after the function definition).
 
     Args:
         tests_path: Root directory to scan for test files.
@@ -415,37 +458,92 @@ def _scan_manual_tests(tests_path: Path, repo_path: Path) -> list[TestInfo]:
             source = test_file.read_text(encoding="utf-8")
             tree = ast.parse(source=source, filename=str(test_file))
         except (SyntaxError, UnicodeDecodeError):
+            LOGGER.warning(f"Could not parse {test_file}, skipping manual scan")
             continue
 
         rel_path = str(test_file.relative_to(repo_path))
 
+        # Check for module-level __test__ = False
+        module_disabled = False
+        # Set of function names disabled via func.__test__ = False
+        disabled_functions: set[str] = set()
+
+        for node in ast.iter_child_nodes(tree):
+            # Pattern 1: Module-level __test__ = False
+            if _is_test_false_assign(node):
+                module_disabled = True
+                break
+
+        if module_disabled:
+            # All test functions and methods in this file are manual
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if node.name.startswith("test_"):
+                        node_id = f"{rel_path}::{node.name}"
+                        manual_tests.append(_manual_test_info(node_id=node_id))
+                elif isinstance(node, ast.ClassDef):
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test_"):
+                            node_id = f"{rel_path}::{node.name}::{item.name}"
+                            manual_tests.append(_manual_test_info(node_id=node_id))
+            continue
+
+        # Pattern 2: func.__test__ = False (attribute assignment)
+        # Walk only module-level nodes (and their non-class children like if blocks)
+        # to avoid collecting class-body method.__test__ = False
         for top_node in ast.iter_child_nodes(tree):
-            if not isinstance(top_node, ast.ClassDef):
+            if isinstance(top_node, ast.ClassDef):
                 continue
+            for node in ast.walk(top_node):
+                name = _is_attr_test_false(node)
+                if name:
+                    disabled_functions.add(name)
 
-            has_test_false = False
-            for item in top_node.body:
-                if (
-                    isinstance(item, ast.Assign)
-                    and any(
-                        isinstance(target, ast.Name) and target.id == "__test__"
-                        for target in item.targets
-                    )
-                    and isinstance(item.value, ast.Constant)
-                    and item.value.value is False
-                ):
-                    has_test_false = True
-                    break
+        # Process class-level and function-level __test__ = False
+        for node in ast.iter_child_nodes(tree):
+            # Pattern 3: Class-level __test__ = False
+            if isinstance(node, ast.ClassDef):
+                has_test_false = False
+                class_disabled_funcs: set[str] = set()
 
-            if has_test_false:
-                for item in top_node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test_"):
-                        node_id = f"{rel_path}::{top_node.name}::{item.name}"
-                        manual_tests.append(TestInfo(
-                            node_id=node_id,
-                            team=_get_team_from_node_id(node_id=node_id),
-                            is_manual=True,
-                        ))
+                for item in node.body:
+                    # Class body: __test__ = False
+                    # Class-wide disable supersedes per-method disables,
+                    # so break immediately — no need to collect class_disabled_funcs.
+                    if _is_test_false_assign(item):
+                        has_test_false = True
+                        break
+
+                    # Class body: method.__test__ = False
+                    name = _is_attr_test_false(item)
+                    if name:
+                        class_disabled_funcs.add(name)
+
+                if has_test_false:
+                    # All test methods in this class are manual
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test_"):
+                            node_id = f"{rel_path}::{node.name}::{item.name}"
+                            manual_tests.append(_manual_test_info(node_id=node_id))
+                elif class_disabled_funcs:
+                    # Individual methods disabled
+                    for item in node.body:
+                        if (
+                            isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                            and item.name.startswith("test_")
+                            and item.name in class_disabled_funcs
+                        ):
+                            node_id = f"{rel_path}::{node.name}::{item.name}"
+                            manual_tests.append(_manual_test_info(node_id=node_id))
+
+            # Function-level: func.__test__ = False (already collected above)
+            elif (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name.startswith("test_")
+                and node.name in disabled_functions
+            ):
+                node_id = f"{rel_path}::{node.name}"
+                manual_tests.append(_manual_test_info(node_id=node_id))
 
     LOGGER.info(f"Found {len(manual_tests)} manual/STD placeholder tests")
     return manual_tests
