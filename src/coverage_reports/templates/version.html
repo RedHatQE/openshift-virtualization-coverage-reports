@@ -301,7 +301,7 @@
     <h2>Per-Team Breakdown</h2>
     <table class="team-summary-table">
         <tr>
-            <th>Team</th><th>Total</th><th>Passed</th><th>Failed</th>
+            <th>Team</th><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th>
             <th>Quarantined</th><th>Never Executed</th><th>Stale</th><th>Coverage</th>
         </tr>
         {% for team in teams %}
@@ -310,6 +310,7 @@
             <td>{{ team.total }}</td>
             <td>{{ team.passed }}</td>
             <td>{{ team.failed }}</td>
+            <td>{{ team.skipped }}</td>
             <td>{{ team.quarantined }}</td>
             <td>{{ team.never_executed }}</td>
             <td>{{ team.stale }}</td>
@@ -321,6 +322,7 @@
             <td>{{ summary.total_tests }}</td>
             <td>{{ summary.passed }}</td>
             <td>{{ summary.failed }}</td>
+            <td>{{ summary.skipped }}</td>
             <td>{{ summary.quarantined }}</td>
             <td>{{ summary.never_executed }}</td>
             <td>{{ summary.stale }}</td>
