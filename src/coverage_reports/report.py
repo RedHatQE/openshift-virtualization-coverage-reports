@@ -58,10 +58,12 @@ class TeamReportData:
         never_executed: Never-executed count.
         stale: Stale count.
         quarantined: Quarantined count.
+        manual: Manual (unimplemented STD) test count.
         coverage_pct: Coverage percentage.
         failed_items: Failed test items for rendering.
         stale_items: Stale test items for rendering.
         quarantined_items: Quarantined test items for rendering.
+        manual_items: Manual test items for rendering.
         never_executed_items: Never-executed test items for rendering.
         passed_items: Passed test items for rendering.
         skipped_items: Skipped test items for rendering.
@@ -75,10 +77,12 @@ class TeamReportData:
     never_executed: int
     stale: int
     quarantined: int
+    manual: int
     coverage_pct: float
     failed_items: list[dict[str, Any]]
     stale_items: list[dict[str, Any]]
     quarantined_items: list[dict[str, Any]]
+    manual_items: list[dict[str, Any]]
     never_executed_items: list[dict[str, Any]]
     passed_items: list[dict[str, Any]]
     skipped_items: list[dict[str, Any]]
@@ -488,10 +492,15 @@ def _build_team_data(
         elif status_upper == "SKIPPED":
             skipped_items.append(item)
 
+    # Separate manual tests from never_executed
+    manual_items = [i for i in never_executed_items if i.get("is_manual")]
+    never_executed_items = [i for i in never_executed_items if not i.get("is_manual")]
+
     total = len(tests)
     passed_count = len(passed_items)
     failed_count = len(failed_items)
     skipped_count = len(skipped_items)
+    manual_count = len(manual_items)
     never_executed_count = len(never_executed_items)
     stale_count = len(stale_items)
     quarantined_count = len(quarantined_items)
@@ -499,9 +508,10 @@ def _build_team_data(
     coverage_pct = (executed / total * 100) if total > 0 else 0.0
 
     # --- Parameterized test cross-section grouping ---
-    # Note: quarantined_items excluded — quarantined tests are filtered out
-    # early in the classification loop and never placed in other sections,
-    # so they cannot have parameterized siblings across sections.
+    # Note: quarantined_items and manual_items excluded — quarantined tests
+    # are filtered out early in the classification loop, and manual tests are
+    # unimplemented STDs that cannot have executed siblings across sections.
+    # Neither can have parameterized siblings in other status sections.
     param_groups: dict[str, list[dict[str, Any]]] = {}
     for section_items in [
         passed_items,
@@ -570,10 +580,12 @@ def _build_team_data(
         never_executed=never_executed_count,
         stale=stale_count,
         quarantined=quarantined_count,
+        manual=manual_count,
         coverage_pct=round(coverage_pct, 1),
         failed_items=_sort_and_group(items=failed_items),
         stale_items=_sort_and_group(items=stale_items),
         quarantined_items=_sort_and_group(items=quarantined_items),
+        manual_items=_sort_and_group(items=manual_items),
         never_executed_items=_sort_and_group(items=never_executed_items),
         passed_items=_sort_and_group(items=passed_items),
         skipped_items=_sort_and_group(items=skipped_items),
@@ -772,25 +784,16 @@ def render_version_report(
     report_filename = f"report_{version}.html"
 
     # Count manual tests
-    total_manual = sum(1 for test in tests if test.is_manual)
+    total_manual = sum(td.manual for td in team_data_list)
     total_automated = total_tests - total_manual - total_quarantined
 
-    # Build per-team gating items and manual items
+    # Build per-team gating items
     gating_by_team: dict[str, list[dict[str, Any]]] = {}
-    manual_by_team: dict[str, list[dict[str, Any]]] = {}
     for item in all_gating:
         team = _get_team_from_node_id(node_id=item["node_id"])
         if team_aliases and team in team_aliases:
             team = team_aliases[team]
         gating_by_team.setdefault(team, []).append(item)
-    for test in tests:
-        if test.is_manual:
-            team = test.team or _get_team_from_node_id(node_id=test.node_id)
-            if team_aliases and team in team_aliases:
-                team = team_aliases[team]
-            manual_by_team.setdefault(team, []).append(
-                _test_info_to_template_item(test_info=test)
-            )
 
     html = template.render(
         version=version,
@@ -821,12 +824,13 @@ def render_version_report(
                 "never_executed": td.never_executed,
                 "stale": td.stale,
                 "quarantined": td.quarantined,
+                "manual": td.manual,
                 "coverage_pct": td.coverage_pct,
                 "gating_items": _sort_and_group(items=gating_by_team.get(td.name, [])),
                 "failed_items": td.failed_items,
                 "stale_items": td.stale_items,
                 "quarantined_items": td.quarantined_items,
-                "manual_items": _sort_and_group(items=manual_by_team.get(td.name, [])),
+                "manual_items": td.manual_items,
                 "never_executed_items": td.never_executed_items,
                 "passed_items": td.passed_items,
                 "skipped_items": td.skipped_items,
