@@ -122,22 +122,23 @@
         /* Group row */
         .group-row td {
             padding: 0;
-            max-width: 0; /* forces td to shrink so text-overflow works on inner summary */
+            max-width: 0; /* forces td to shrink so text-overflow works on inner elements */
             overflow: hidden;
         }
-        .group-row details {
-            border: none;
-            margin: 0;
-            overflow: hidden;
-        }
-        .group-row summary {
+
+        /* Param group (always visible, no collapse) */
+        .param-group {
             padding: 4px 10px;
-            border: none;
+        }
+        .param-header {
+            font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 0.5rem 0 0.3rem;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             max-width: 100%;
-            display: block;
         }
 
         /* Sort indicators */

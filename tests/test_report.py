@@ -207,7 +207,7 @@ class TestCrossSectionGrouping:
         )
 
         # All 3 variants should be in the group
-        assert "3 params" in html
+        assert "3 variants" in html
         # Counts should reflect individual test statuses
         assert ver_data.passed == 2
         assert ver_data.never_executed >= 1
@@ -252,7 +252,7 @@ class TestCrossSectionGrouping:
             stale_days=30,
         )
 
-        assert "2 params" in html
+        assert "2 variants" in html
         assert ver_data.passed == 2
         assert ver_data.failed == 0
         assert ver_data.never_executed == 0
@@ -532,7 +532,7 @@ class TestRenderVersionReport:
         )
 
         # Group should appear in HTML
-        assert "3 params" in html
+        assert "3 variants" in html
         assert "group-row" in html
         assert "param-table" in html
         # Individual param suffixes should be in sub-table

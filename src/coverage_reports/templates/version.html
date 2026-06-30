@@ -68,10 +68,10 @@
 {% if item.is_group %}
 <tr class="group-row">
     <td class="mono" colspan="{{ 7 if has_rp else 6 }}">
-        <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
-            </summary>
+            </div>
             {% if item.is_matrix %}
             {{ matrix_grid(item) }}
             {% else %}
@@ -91,7 +91,7 @@
                 {% endfor %}
             </table>
             {% endif %}
-        </details>
+        </div>
     </td>
 </tr>
 {% else %}
@@ -109,15 +109,15 @@
 {% endif %}
 {% endmacro %}
 
-{# PASSED / STALE / SKIPPED table row (Test, Bundle, Date, Source, Log) #}
+{# STALE / SKIPPED table row (Test, Bundle, Date, Source, Log) #}
 {% macro bundle_date_row(item, has_rp) %}
 {% if item.is_group %}
 <tr class="group-row">
     <td class="mono" colspan="{{ 5 if has_rp else 4 }}">
-        <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
-            </summary>
+            </div>
             {% if item.is_matrix %}
             {{ matrix_grid(item) }}
             {% else %}
@@ -135,7 +135,7 @@
                 {% endfor %}
             </table>
             {% endif %}
-        </details>
+        </div>
     </td>
 </tr>
 {% else %}
@@ -151,47 +151,15 @@
 {% endif %}
 {% endmacro %}
 
-{# NEVER EXECUTED table row (Test, Type) #}
-{% macro never_executed_row(item) %}
-{% if item.is_group %}
-<tr class="group-row">
-    <td class="mono" colspan="2">
-        <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
-                {{ mini_stats(item) }}
-            </summary>
-            {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
-            {% else %}
-            <table class="param-table">
-                {% for sub in item.group_items %}
-                <tr>
-                    <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
-                    <td>{{ "Manual" if sub.is_manual else "Automated" }}</td>
-                </tr>
-                {% endfor %}
-            </table>
-            {% endif %}
-        </details>
-    </td>
-</tr>
-{% else %}
-<tr>
-    <td class="mono">{{ item.node_id }}</td>
-    <td>{{ "Manual" if item.is_manual else "Automated" }}</td>
-</tr>
-{% endif %}
-{% endmacro %}
-
-{# MANUAL table row (Test only) #}
-{% macro single_col_row(item) %}
+{# PASSED table row (Test only) #}
+{% macro passed_row(item) %}
 {% if item.is_group %}
 <tr class="group-row">
     <td class="mono" colspan="1">
-        <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
-            </summary>
+            </div>
             {% if item.is_matrix %}
             {{ matrix_grid(item) }}
             {% else %}
@@ -201,7 +169,63 @@
                 {% endfor %}
             </table>
             {% endif %}
-        </details>
+        </div>
+    </td>
+</tr>
+{% else %}
+<tr><td class="mono">{{ item.node_id }}</td></tr>
+{% endif %}
+{% endmacro %}
+
+{# NEVER EXECUTED table row (Test) #}
+{% macro never_executed_row(item) %}
+{% if item.is_group %}
+<tr class="group-row">
+    <td class="mono" colspan="1">
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
+                {{ mini_stats(item) }}
+            </div>
+            {% if item.is_matrix %}
+            {{ matrix_grid(item) }}
+            {% else %}
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr>
+                    <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td class="mono">{{ item.node_id }}</td>
+</tr>
+{% endif %}
+{% endmacro %}
+
+{# MANUAL table row (Test only) #}
+{% macro manual_row(item) %}
+{% if item.is_group %}
+<tr class="group-row">
+    <td class="mono" colspan="1">
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
+                {# No mini_stats: manual tests have no RP results — all are never-executed #}
+            </div>
+            {% if item.is_matrix %}
+            {{ matrix_grid(item) }}
+            {% else %}
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr><td class="mono">{{ sub.node_id[item.node_id|length:] }}</td></tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
     </td>
 </tr>
 {% else %}
@@ -214,10 +238,10 @@
 {% if item.is_group %}
 <tr class="group-row">
     <td class="mono" colspan="3">
-        <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
-            </summary>
+            </div>
             {% if item.is_matrix %}
             {{ matrix_grid(item) }}
             {% else %}
@@ -231,7 +255,7 @@
                 {% endfor %}
             </table>
             {% endif %}
-        </details>
+        </div>
     </td>
 </tr>
 {% else %}
@@ -248,10 +272,10 @@
 {% if item.is_group %}
 <tr class="group-row">
     <td class="mono" colspan="2">
-        <details>
-            <summary>{{ item.node_id }} <span class="param-count">[{{ item.group_count }} params]</span>
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
-            </summary>
+            </div>
             {% if item.is_matrix %}
             {{ matrix_grid(item) }}
             {% else %}
@@ -264,7 +288,7 @@
                 {% endfor %}
             </table>
             {% endif %}
-        </details>
+        </div>
     </td>
 </tr>
 {% else %}
@@ -302,7 +326,7 @@
     <table class="team-summary-table">
         <tr>
             <th>Team</th><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th>
-            <th>Quarantined</th><th>Never Executed</th><th>Stale</th><th>Coverage</th>
+            <th>Quarantined</th><th>Manual</th><th>Never Executed</th><th>Stale</th><th>Coverage</th>
         </tr>
         {% for team in teams %}
         <tr>
@@ -312,6 +336,7 @@
             <td>{{ team.failed }}</td>
             <td>{{ team.skipped }}</td>
             <td>{{ team.quarantined }}</td>
+            <td>{{ team.manual }}</td>
             <td>{{ team.never_executed }}</td>
             <td>{{ team.stale }}</td>
             <td>{{ "%.1f" | format(team.coverage_pct) }}%</td>
@@ -324,6 +349,7 @@
             <td>{{ summary.failed }}</td>
             <td>{{ summary.skipped }}</td>
             <td>{{ summary.quarantined }}</td>
+            <td>{{ summary.manual }}</td>
             <td>{{ summary.never_executed }}</td>
             <td>{{ summary.stale }}</td>
             <td>{{ "%.1f" | format(summary.coverage_pct) }}%</td>
@@ -445,16 +471,13 @@
 
     {# MANUAL #}
     {% if team.manual_items %}
-    <details open class="section-manual">
-        <summary>MANUAL TESTS ({{ team.manual_items | length }}) <small class="section-desc">— Unimplemented test designs (__test__ = False)</small></summary>
+    <details class="section-manual">
+        <summary>MANUAL TESTS ({{ team.manual_items | length }}) <small class="section-desc">— Unimplemented test designs (__test__ = False) with no results in RP</small></summary>
         <table>
-            <colgroup>
-                <col style="width: 100%">
-            </colgroup>
             <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th></tr></thead>
             <tbody>
             {% for item in team.manual_items %}
-            {{ single_col_row(item) }}
+            {{ manual_row(item) }}
             {% endfor %}
             </tbody>
         </table>
@@ -467,10 +490,9 @@
         <summary>NEVER EXECUTED ({{ team.never_executed_items | length }}) <small class="section-desc">— Implemented tests with no RP results</small></summary>
         <table>
             <colgroup>
-                <col style="width: 85%">
-                <col style="width: 15%">
+                <col style="width: 100%">
             </colgroup>
-            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Type</th></tr></thead>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th></tr></thead>
             <tbody>
             {% for item in team.never_executed_items %}
             {{ never_executed_row(item) }}
@@ -504,20 +526,13 @@
 
     {# PASSED #}
     {% if team.passed_items %}
-    <details class="section-passed">
+    <details open class="section-passed">
         <summary>PASSED TESTS ({{ team.passed_items | length }}) <small class="section-desc">— Most recent result is PASSED</small></summary>
         <table>
-            <colgroup>
-                <col style="width: {% if rp_url %}55{% else %}63{% endif %}%">
-                <col style="width: 13%">
-                <col style="width: 12%">
-                <col style="width: 12%">
-                {% if rp_url %}<col style="width: 8%">{% endif %}
-            </colgroup>
-            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Bundle</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Date</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Source</th>{% if rp_url %}<th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Log</th>{% endif %}</tr></thead>
+            <thead><tr><th>Test</th></tr></thead>
             <tbody>
             {% for item in team.passed_items %}
-            {{ bundle_date_row(item, rp_url) }}
+            {{ passed_row(item) }}
             {% endfor %}
             </tbody>
         </table>
