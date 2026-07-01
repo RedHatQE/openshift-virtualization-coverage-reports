@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Coverage — {{ version }}{% endblock %}
 {% block body %}
-<h1>Test Coverage Report — Version {{ version }}</h1>
+<h1>Test Coverage Gate — {{ version }}</h1>
 <div class="subtitle">
     Repo: {{ repo_name }} · Branch: {{ branch }} · Stale: {{ stale_days }}d · Generated: {{ generated_at }}
     · <a href="index.html">← Dashboard</a>
 </div>
+
+<div class="badge {% if gate_passed %}badge-pass{% else %}badge-fail{% endif %}">GATE: {% if gate_passed %}PASSED{% else %}FAILED{% endif %}</div>
 
 {# ── Shared macros ── #}
 
@@ -21,44 +23,53 @@
 {% endif %}
 {% endmacro %}
 
-{% macro matrix_grid(item) %}
-<div class="matrix-grid">
-    <table>
-        <thead>
-            <tr>
-                <th class="corner"></th>
-                {% for col in item.matrix_cols %}
-                <th>{{ col }}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in item.matrix_rows %}
-            <tr>
-                <th class="row-header">{{ row }}</th>
-                {% for col in item.matrix_cols %}
-                {% set cell = item.matrix_cells.get(row, {}).get(col) %}
-                {% if cell %}
-                    {% if cell.status == 'PASSED' %}
-                    <td class="cell-pass">✓</td>
-                    {% elif cell.status == 'FAILED' %}
-                    <td class="cell-fail">✗</td>
-                    {% elif cell.status == 'SKIPPED' %}
-                    <td class="cell-skip">⊘</td>
-                    {% elif cell.status == 'STALE' %}
-                    <td class="cell-stale">⏳</td>
-                    {% else %}
-                    <td class="cell-never">—</td>
-                    {% endif %}
-                {% else %}
-                <td class="cell-never">—</td>
-                {% endif %}
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+{# ── Reference-style inline matrix ── #}
+{% macro ref_matrix_grid(item) %}
+{% if item.matrix_rows | length == 1 %}
+{# Single-row matrix: headers are col values, single data row #}
+<table class="matrix-table">
+<tr>{% for col in item.matrix_cols %}<th>{{ col }}</th>{% endfor %}</tr>
+<tr>
+{% for col in item.matrix_cols %}
+{% set cell = item.matrix_cells.get(item.matrix_rows[0], {}).get(col) %}
+{{ matrix_status_cell(cell) }}
+{% endfor %}
+</tr>
+</table>
+{% else %}
+{# Multi-row matrix: row headers + col headers #}
+<table class="matrix-table">
+<tr><th></th>{% for col in item.matrix_cols %}<th>{{ col }}</th>{% endfor %}</tr>
+{% for row in item.matrix_rows %}
+<tr><th>{{ row }}</th>
+{% for col in item.matrix_cols %}
+{% set cell = item.matrix_cells.get(row, {}).get(col) %}
+{{ matrix_status_cell(cell) }}
+{% endfor %}
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endmacro %}
+
+{% macro matrix_status_cell(cell) %}
+{% if cell %}
+    {% if cell.status == 'PASSED' %}
+    <td class="matrix-cell status-passed">✅</td>
+    {% elif cell.status == 'FAILED' %}
+    <td class="matrix-cell status-failed" title="{{ cell.defect_type or '' }}: {{ (cell.defect_comment or '')[:80] }}">{% if cell.defect_type == 'System Issue' %}Sys Issue{% elif cell.defect_type == 'To Investigate' %}To Invest.{% elif cell.defect_type %}{{ cell.defect_type }}{% else %}❌{% endif %}</td>
+    {% elif cell.status == 'SKIPPED' %}
+    <td class="matrix-cell status-skipped">SKIP</td>
+    {% elif cell.status == 'STALE' %}
+    <td class="matrix-cell status-stale">⚠️</td>
+    {% elif cell.status == 'QUARANTINED' %}
+    <td class="matrix-cell status-quarantined">Q</td>
+    {% else %}
+    <td class="matrix-cell status-never">—</td>
+    {% endif %}
+{% else %}
+<td class="matrix-cell status-never">—</td>
+{% endif %}
 {% endmacro %}
 
 {# ── Row macros ── #}
@@ -66,15 +77,18 @@
 {# FAILED table row #}
 {% macro failed_row(item, has_rp) %}
 {% if item.is_group %}
+{% if item.is_matrix %}
+<tr class="group-row"><td class="mono" colspan="{{ 7 if has_rp else 6 }}">
+<div class="mono" style="margin: 0.5rem 0;"><b>{{ item.node_id }}</b> ({{ item.group_count }} variants)</div>
+{{ ref_matrix_grid(item) }}
+</td></tr>
+{% else %}
 <tr class="group-row">
     <td class="mono" colspan="{{ 7 if has_rp else 6 }}">
         <div class="param-group">
             <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
             </div>
-            {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
-            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr>
@@ -85,25 +99,25 @@
                     <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ sub.defect_comment | default('-', boolean=true) }}{% for url in sub.comment_urls %}<a href="{{ url }}" target="_blank" class="comment-link">🔗</a>{% endfor %}</td>
                     <td>{{ sub.source | default('-', boolean=true) | title }}</td>
                     {% if has_rp %}
-                    <td>{% if sub.launch_id and sub.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ sub.launch_id }}/{{ sub.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                    <td>{% if sub.launch_id and sub.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ sub.launch_id }}/{{ sub.item_id }}" target="_blank">📋</a>{% endif %}</td>
                     {% endif %}
                 </tr>
                 {% endfor %}
             </table>
-            {% endif %}
         </div>
     </td>
 </tr>
+{% endif %}
 {% else %}
 <tr>
     <td class="mono">{{ item.node_id }}</td>
     <td>{{ item.bundle | default('-', boolean=true) }}</td>
     <td>{{ item.last_executed | default('-', boolean=true) }}</td>
+    <td>{{ item.source | default('-', boolean=true) | title }}</td>
     <td>{{ item.defect_type | default('-', boolean=true) }}</td>
     <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ item.defect_comment | default('-', boolean=true) }}{% for url in item.comment_urls %}<a href="{{ url }}" target="_blank" class="comment-link">🔗</a>{% endfor %}</td>
-    <td>{{ item.source | default('-', boolean=true) | title }}</td>
     {% if has_rp %}
-    <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+    <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}/log" target="_blank">RP log</a>{% endif %}</td>
     {% endif %}
 </tr>
 {% endif %}
@@ -112,15 +126,18 @@
 {# STALE / SKIPPED table row (Test, Bundle, Date, Source, Log) #}
 {% macro bundle_date_row(item, has_rp) %}
 {% if item.is_group %}
+{% if item.is_matrix %}
+<tr class="group-row"><td class="mono" colspan="{{ 5 if has_rp else 4 }}">
+<div class="param-header">{{ item.node_id }} ({{ item.group_count }} variants)</div>
+{{ ref_matrix_grid(item) }}
+</td></tr>
+{% else %}
 <tr class="group-row">
     <td class="mono" colspan="{{ 5 if has_rp else 4 }}">
         <div class="param-group">
             <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
             </div>
-            {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
-            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr>
@@ -129,15 +146,15 @@
                     <td>{{ sub.last_executed | default('-', boolean=true) }}</td>
                     <td>{{ sub.source | default('-', boolean=true) | title }}</td>
                     {% if has_rp %}
-                    <td>{% if sub.launch_id and sub.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ sub.launch_id }}/{{ sub.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+                    <td>{% if sub.launch_id and sub.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ sub.launch_id }}/{{ sub.item_id }}" target="_blank">📋</a>{% endif %}</td>
                     {% endif %}
                 </tr>
                 {% endfor %}
             </table>
-            {% endif %}
         </div>
     </td>
 </tr>
+{% endif %}
 {% else %}
 <tr>
     <td class="mono">{{ item.node_id }}</td>
@@ -145,64 +162,82 @@
     <td>{{ item.last_executed | default('-', boolean=true) }}</td>
     <td>{{ item.source | default('-', boolean=true) | title }}</td>
     {% if has_rp %}
-    <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">🔗</a>{% endif %}</td>
+    <td>{% if item.launch_id and item.item_id %}<a class="rp-link" href="{{ rp_url }}/ui/#{{ rp_project }}/launches/all/{{ item.launch_id }}/{{ item.item_id }}" target="_blank">📋</a>{% endif %}</td>
     {% endif %}
 </tr>
 {% endif %}
 {% endmacro %}
 
-{# PASSED table row (Test only) #}
+{# PASSED table row (Test, Bundle, Date, Source) #}
 {% macro passed_row(item) %}
 {% if item.is_group %}
-<tr class="group-row">
-    <td class="mono" colspan="1">
-        <div class="param-group">
-            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
-                {{ mini_stats(item) }}
-            </div>
-            {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
-            {% else %}
-            <table class="param-table">
-                {% for sub in item.group_items %}
-                <tr><td class="mono">{{ sub.node_id[item.node_id|length:] }}</td></tr>
-                {% endfor %}
-            </table>
-            {% endif %}
-        </div>
-    </td>
-</tr>
+{% if item.is_matrix %}
+<tr class="group-row"><td class="mono" colspan="4">
+<div class="param-header">{{ item.node_id }} ({{ item.group_count }} variants)</div>
+{{ ref_matrix_grid(item) }}
+</td></tr>
 {% else %}
-<tr><td class="mono">{{ item.node_id }}</td></tr>
-{% endif %}
-{% endmacro %}
-
-{# NEVER EXECUTED table row (Test) #}
-{% macro never_executed_row(item) %}
-{% if item.is_group %}
 <tr class="group-row">
-    <td class="mono" colspan="1">
+    <td class="mono" colspan="4">
         <div class="param-group">
             <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
                 {{ mini_stats(item) }}
             </div>
-            {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
-            {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
                 <tr>
                     <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
+                    <td>{{ sub.bundle | default('-', boolean=true) }}</td>
+                    <td>{{ sub.last_executed | default('-', boolean=true) }}</td>
+                    <td>{{ sub.source | default('-', boolean=true) | title }}</td>
                 </tr>
                 {% endfor %}
             </table>
-            {% endif %}
         </div>
     </td>
 </tr>
+{% endif %}
 {% else %}
 <tr>
     <td class="mono">{{ item.node_id }}</td>
+    <td>{{ item.bundle | default('-', boolean=true) }}</td>
+    <td>{{ item.last_executed | default('-', boolean=true) }}</td>
+    <td>{{ item.source | default('-', boolean=true) | title }}</td>
+</tr>
+{% endif %}
+{% endmacro %}
+
+{# NEVER EXECUTED table row (Test, Type) #}
+{% macro never_executed_row(item) %}
+{% if item.is_group %}
+{% if item.is_matrix %}
+<tr class="group-row"><td class="mono" colspan="2">
+<div class="param-header">{{ item.node_id }} ({{ item.group_count }} variants)</div>
+{{ ref_matrix_grid(item) }}
+</td></tr>
+{% else %}
+<tr class="group-row">
+    <td class="mono" colspan="2">
+        <div class="param-group">
+            <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
+                {{ mini_stats(item) }}
+            </div>
+            <table class="param-table">
+                {% for sub in item.group_items %}
+                <tr>
+                    <td class="mono">{{ sub.node_id[item.node_id|length:] }}</td>
+                    <td>{% if sub.is_manual %}Manual{% else %}Automated{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </td>
+</tr>
+{% endif %}
+{% else %}
+<tr>
+    <td class="mono">{{ item.node_id }}</td>
+    <td>{% if item.is_manual %}Manual{% else %}Automated{% endif %}</td>
 </tr>
 {% endif %}
 {% endmacro %}
@@ -214,10 +249,9 @@
     <td class="mono" colspan="1">
         <div class="param-group">
             <div class="param-header">{{ item.node_id }} <span class="param-count">({{ item.group_count }} variants)</span>
-                {# No mini_stats: manual tests have no RP results — all are never-executed #}
             </div>
             {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
+            {{ ref_matrix_grid(item) }}
             {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
@@ -243,7 +277,7 @@
                 {{ mini_stats(item) }}
             </div>
             {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
+            {{ ref_matrix_grid(item) }}
             {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
@@ -277,7 +311,7 @@
                 {{ mini_stats(item) }}
             </div>
             {% if item.is_matrix %}
-            {{ matrix_grid(item) }}
+            {{ ref_matrix_grid(item) }}
             {% else %}
             <table class="param-table">
                 {% for sub in item.group_items %}
@@ -296,12 +330,140 @@
 {% endif %}
 {% endmacro %}
 
+{# ── Analysis rendering macros ── #}
+
+{# Summary analysis: grouped by Team with rowspan, Gating/Non-gating rows #}
+{% macro render_summary_analysis(records, analysis_arch, analysis_max_bundles) %}
+{% if records %}
+<h2>Failure Analysis (arch: {{ analysis_arch }}) — last {{ analysis_max_bundles }} bundles · Tier 1 &amp; Tier 2</h2>
+<table class="analysis-table">
+    <tr>
+        <th>Team</th><th>Type</th><th>Launches</th>
+        <th>Total</th><th>Passed</th><th>Failed</th>
+        <th>Analyzed</th><th>To Investigate</th><th>Analysis %</th>
+        <th>Product Bug</th><th>Auto Bug</th><th>System Issue</th>
+    </tr>
+    {# Group records by display_team preserving order #}
+    {% set ns = namespace(current_team='', team_idx=0) %}
+    {% for record in records %}
+    {% if record.display_team != ns.current_team %}
+        {% set ns.current_team = record.display_team %}
+        {% set ns.team_idx = ns.team_idx + 1 %}
+    {% endif %}
+    {% set team_records = records | selectattr('display_team', 'equalto', record.display_team) | list %}
+    {% set is_first = (loop.index == 1) or (records[loop.index0 - 1].display_team != record.display_team) %}
+    {% if is_first %}
+    <tr{% if record.display_team == 'TOTAL' %} class="total-row"{% elif ns.team_idx % 2 == 0 %} class="alt-team"{% endif %}>
+        {% if team_records | length > 1 %}
+        <td rowspan="{{ team_records | length }}"><b>{{ record.display_team }}</b></td>
+        {% else %}
+        <td><b>{{ record.display_team }}</b></td>
+        {% endif %}
+        {{ analysis_data_cells(record) }}
+    </tr>
+    {% else %}
+    <tr{% if record.display_team == 'TOTAL' %} class="total-row"{% elif ns.team_idx % 2 == 0 %} class="alt-team"{% endif %}>
+        {{ analysis_data_cells(record) }}
+    </tr>
+    {% endif %}
+    {% endfor %}
+</table>
+{% endif %}
+{% endmacro %}
+
+{# Per-team analysis: grouped by Bundle with rowspan #}
+{% macro render_team_analysis(team_records, team_name, analysis_arch, analysis_max_bundles) %}
+{% if team_records %}
+<details class="section-analysis" open>
+    <summary>FAILURE ANALYSIS (arch: {{ analysis_arch }}) — last {{ analysis_max_bundles }} bundles · Tier 1 &amp; Tier 2 <small class="section-desc">— Analysis status of failed tests across launches</small></summary>
+    <table class="analysis-table">
+        <tr>
+            <th>Bundle</th><th>Type</th><th>Launches</th>
+            <th>Total</th><th>Passed</th><th>Failed</th>
+            <th>Analyzed</th><th>To Investigate</th><th>Analysis %</th>
+            <th>Product Bug</th><th>Auto Bug</th><th>System Issue</th>
+        </tr>
+        {% set ns = namespace(current_bundle='', bundle_idx=0) %}
+        {% for record in team_records %}
+        {% if record.bundle != ns.current_bundle %}
+            {% set ns.current_bundle = record.bundle %}
+            {% set ns.bundle_idx = ns.bundle_idx + 1 %}
+        {% endif %}
+        {% set bundle_records = team_records | selectattr('bundle', 'equalto', record.bundle) | list %}
+        {% set is_first = (loop.index == 1) or (team_records[loop.index0 - 1].bundle != record.bundle) %}
+        {% if is_first %}
+        <tr{% if ns.bundle_idx % 2 == 0 %} class="alt-team"{% endif %}>
+            {% if bundle_records | length > 1 %}
+            <td rowspan="{{ bundle_records | length }}"><b>{{ record.bundle }}</b></td>
+            {% else %}
+            <td><b>{{ record.bundle }}</b></td>
+            {% endif %}
+            {{ analysis_data_cells(record) }}
+        </tr>
+        {% else %}
+        <tr{% if ns.bundle_idx % 2 == 0 %} class="alt-team"{% endif %}>
+            {{ analysis_data_cells(record) }}
+        </tr>
+        {% endif %}
+        {% endfor %}
+    </table>
+</details>
+{% endif %}
+{% endmacro %}
+
+{# Shared analysis data cells (Type through System Issue) #}
+{% macro analysis_data_cells(record) %}
+<td>{{ record.tier }}</td>
+<td>{{ "{:,}".format(record.launches) }}</td>
+<td>{{ "{:,}".format(record.total) }}</td>
+<td>{{ "{:,}".format(record.passed) }}</td>
+<td>{{ "{:,}".format(record.failed) }}</td>
+{% if record.failed > 0 %}
+    {% set rate = [((record.analyzed / record.failed * 100) | round | int), 100] | min %}
+    <td>{{ record.analyzed }}</td>
+    <td>{{ record.to_investigate }}</td>
+    <td class="{% if rate >= 80 %}analysis-rate-high{% elif rate >= 40 %}analysis-rate-mid{% else %}analysis-rate-low{% endif %}">{{ rate }}%</td>
+    <td>{{ record.product_bug }}</td>
+    <td>{{ record.automation_bug }}</td>
+    <td>{{ record.system_issue }}</td>
+{% else %}
+    <td class="analysis-rate-na">-</td>
+    <td class="analysis-rate-na">-</td>
+    <td class="analysis-rate-na">-</td>
+    <td class="analysis-rate-na">-</td>
+    <td class="analysis-rate-na">-</td>
+    <td class="analysis-rate-na">-</td>
+{% endif %}
+{% endmacro %}
+
 <!-- Tabs -->
 <div class="tabs">
     <button class="tab-btn active" onclick="openTab(event, 'summary')">Summary</button>
     {% for team in teams %}
     <button class="tab-btn" onclick="openTab(event, 'team-{{ team.name }}')">{{ team.name }} ({{ team.total }})</button>
     {% endfor %}
+</div>
+
+<!-- Legend -->
+<div class="legend">
+<details>
+<summary><strong>Legend</strong></summary>
+<table>
+<tr><th colspan="2">Status Icons</th></tr>
+<tr><td class="matrix-cell status-passed">✅</td><td>Passed — test passed in most recent run</td></tr>
+<tr><td class="matrix-cell status-failed">❌</td><td>Failed — test failed, no defect classification in ReportPortal</td></tr>
+<tr><td class="matrix-cell status-never">—</td><td>Never Executed — no results found in ReportPortal for this bundle</td></tr>
+<tr><td class="matrix-cell status-stale">⚠️</td><td>Stale — last execution is older than the stale threshold</td></tr>
+<tr><td class="matrix-cell">SKIP</td><td>Skipped — test was skipped (not quarantined) in most recent run</td></tr>
+<tr><td class="matrix-cell status-quarantined">Q</td><td>Quarantined — intentionally disabled due to known bug or automation issue</td></tr>
+<tr><th colspan="2">Defect Classifications (shown in matrix cells for failed tests)</th></tr>
+<tr><td class="matrix-cell status-failed">Product Bug</td><td>Confirmed defect in the product</td></tr>
+<tr><td class="matrix-cell status-failed">Auto Bug</td><td>Test code issue, not a product defect</td></tr>
+<tr><td class="matrix-cell status-failed">Sys Issue</td><td>Environment or infrastructure problem</td></tr>
+<tr><td class="matrix-cell status-failed">To Invest.</td><td>Failure not yet analyzed</td></tr>
+<tr><td class="matrix-cell status-failed">No Defect</td><td>False alarm or expected behavior</td></tr>
+</table>
+</details>
 </div>
 
 <!-- ==================== SUMMARY TAB ==================== -->
@@ -357,45 +519,7 @@
     </table>
     {% endif %}
 
-    {% if analysis_records %}
-    <h2>Failure Analysis</h2>
-    <p class="section-desc analysis-desc">Aggregated from RP launch statistics — totals reflect cumulative executions across launches, not unique tests.</p>
-    <table class="analysis-table">
-        <tr>
-            <th>Team</th><th>Arch</th><th>Type</th><th>Launches</th>
-            <th>Total</th><th>Passed</th><th>Failed</th>
-            <th>Analyzed</th><th>To Investigate</th><th>Analysis %</th>
-            <th>Product Bug</th><th>Auto Bug</th><th>System Issue</th>
-        </tr>
-        {% for record in analysis_records %}
-        <tr{% if record.display_team == 'TOTAL' %} class="total-row"{% endif %}>
-            <td>{{ record.display_team }}</td>
-            <td>{{ record.arch }}</td>
-            <td>{{ record.tier }}</td>
-            <td>{{ record.launches }}</td>
-            <td>{{ record.total }}</td>
-            <td>{{ record.passed }}</td>
-            <td>{{ record.failed }}</td>
-            {% if record.failed > 0 %}
-            {% set rate = (record.analyzed / record.failed * 100) %}
-            <td>{{ record.analyzed }}</td>
-            <td>{{ record.to_investigate }}</td>
-            <td class="{% if rate >= 80 %}rate-high{% elif rate >= 40 %}rate-mid{% else %}rate-low{% endif %}">{{ "%.0f" | format(rate) }}%</td>
-            <td>{{ record.product_bug }}</td>
-            <td>{{ record.automation_bug }}</td>
-            <td>{{ record.system_issue }}</td>
-            {% else %}
-            <td class="rate-na">-</td>
-            <td class="rate-na">-</td>
-            <td class="rate-na">-</td>
-            <td class="rate-na">-</td>
-            <td class="rate-na">-</td>
-            <td class="rate-na">-</td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-    </table>
-    {% endif %}
+    {{ render_summary_analysis(analysis_records, analysis_arch | default('amd64'), analysis_max_bundles | default(5)) }}
 </div>
 
 <!-- ==================== PER-TEAM TABS ==================== -->
@@ -425,27 +549,43 @@
     </details>
     {% endif %}
 
-    {# FAILED #}
+    {# FAILED — grouped by defect type #}
     {% if team.failed_items %}
     <details open class="section-failed">
-        <summary>FAILED TESTS ({{ team.failed_items | length }}) <small class="section-desc">— Most recent result is FAILED</small></summary>
+        <summary>FAILED TESTS ({{ team.failed_items | length }}) <small class="section-desc">— Tests whose most recent result across all launches is FAILED</small></summary>
+        {# Collect defect types for grouping (non-group items only) #}
+        {% set ns = namespace(defect_groups={}) %}
+        {% for item in team.failed_items %}
+            {% if not item.is_group %}
+                {% set dtype = item.defect_type | default('Unclassified') %}
+                {% if dtype not in ns.defect_groups %}
+                    {% set _ = ns.defect_groups.update({dtype: []}) %}
+                {% endif %}
+                {% set _ = ns.defect_groups[dtype].append(item) %}
+            {% endif %}
+        {% endfor %}
+
+        {# Render defect-type groups #}
+        {% for dtype, ditems in ns.defect_groups.items() %}
+        <div class="defect-group">{{ dtype }} ({{ ditems | length }}):</div>
         <table>
-            <colgroup>
-                <col style="width: {% if rp_url %}40{% else %}47{% endif %}%">
-                <col style="width: 12%">
-                <col style="width: 8%">
-                <col style="width: 10%">
-                <col style="width: 13%">
-                <col style="width: 10%">
-                {% if rp_url %}<col style="width: 7%">{% endif %}
-            </colgroup>
-            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Bundle</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Date</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Defect</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Comment</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Source</th>{% if rp_url %}<th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Log</th>{% endif %}</tr></thead>
-            <tbody>
-            {% for item in team.failed_items %}
+            <tr><th>Test</th><th>Bundle</th><th>Date</th><th>Source</th><th>Defect</th><th>Comment</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            {% for item in ditems %}
             {{ failed_row(item, rp_url) }}
             {% endfor %}
-            </tbody>
         </table>
+        {% endfor %}
+
+        {# Render parameterized groups (matrix items) #}
+        {% set group_items = team.failed_items | selectattr('is_group') | list %}
+        {% if group_items %}
+        <table>
+            <tr><th>Test</th><th>Bundle</th><th>Date</th><th>Source</th><th>Defect</th><th>Comment</th>{% if rp_url %}<th>Log</th>{% endif %}</tr>
+            {% for item in group_items %}
+            {{ failed_row(item, rp_url) }}
+            {% endfor %}
+        </table>
+        {% endif %}
     </details>
     {% endif %}
 
@@ -471,7 +611,7 @@
 
     {# MANUAL #}
     {% if team.manual_items %}
-    <details class="section-manual">
+    <details open class="section-manual">
         <summary>MANUAL TESTS ({{ team.manual_items | length }}) <small class="section-desc">— Unimplemented test designs (__test__ = False) with no results in RP</small></summary>
         <table>
             <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th></tr></thead>
@@ -490,9 +630,10 @@
         <summary>NEVER EXECUTED ({{ team.never_executed_items | length }}) <small class="section-desc">— Implemented tests with no RP results</small></summary>
         <table>
             <colgroup>
-                <col style="width: 100%">
+                <col style="width: 85%">
+                <col style="width: 15%">
             </colgroup>
-            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th></tr></thead>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Type</th></tr></thead>
             <tbody>
             {% for item in team.never_executed_items %}
             {{ never_executed_row(item) }}
@@ -526,10 +667,10 @@
 
     {# PASSED #}
     {% if team.passed_items %}
-    <details open class="section-passed">
+    <details class="section-passed">
         <summary>PASSED TESTS ({{ team.passed_items | length }}) <small class="section-desc">— Most recent result is PASSED</small></summary>
         <table>
-            <thead><tr><th>Test</th></tr></thead>
+            <thead><tr><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Test</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Bundle</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Date</th><th class="sortable" onclick="sortTable(this.closest('table'), this.cellIndex)">Source</th></tr></thead>
             <tbody>
             {% for item in team.passed_items %}
             {{ passed_row(item) }}
@@ -560,6 +701,9 @@
         </table>
     </details>
     {% endif %}
+
+    {# PER-TEAM FAILURE ANALYSIS #}
+    {{ render_team_analysis(team.team_analysis, team.name, analysis_arch | default('amd64'), analysis_max_bundles | default(5)) }}
 </div>
 {% endfor %}
 {% endblock %}

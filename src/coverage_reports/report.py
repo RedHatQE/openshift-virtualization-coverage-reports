@@ -340,7 +340,7 @@ def _test_info_to_template_item(test_info: TestInfo) -> dict[str, Any]:
         "defect_comment": None,
         "launch_id": None,
         "item_id": None,
-        "source": None,
+        "source": "manual" if test_info.is_manual else "automated",
         "comment_urls": [],
         "quarantine_reason": test_info.quarantine_reason,
         "quarantine_jira": test_info.quarantine_jira,
@@ -615,6 +615,8 @@ def render_version_report(
     rp_url: str = "",
     rp_project: str = "",
     team_aliases: dict[str, str] | None = None,
+    analysis_arch: str = "amd64",
+    analysis_max_bundles: int = 5,
 ) -> tuple[str, VersionReportData]:
     """Render an HTML report for a single version.
 
@@ -629,6 +631,8 @@ def render_version_report(
         rp_url: RP base URL for log links.
         rp_project: RP project name for log links.
         team_aliases: Optional mapping of directory team names to target team names.
+        analysis_arch: Architecture filter label for analysis display (default ``amd64``).
+        analysis_max_bundles: Maximum number of recent bundles shown in analysis (default 5).
 
     Returns:
         Tuple of (html_content, version_summary_data).
@@ -742,6 +746,9 @@ def render_version_report(
 
     all_gating.sort(key=_NODE_ID_KEY)
 
+    # Determine gate status
+    gate_passed = len(all_gating) == 0 and total_failed == 0
+
     # Build aggregated analysis records for display
     display_analysis: list[LaunchAnalysisRecord] = []
     if analysis_records:
@@ -795,6 +802,22 @@ def render_version_report(
             team = team_aliases[team]
         gating_by_team.setdefault(team, []).append(item)
 
+    # Build per-team analysis records
+    team_analysis_map: dict[str, list[LaunchAnalysisRecord]] = {}
+    if analysis_records:
+        for record in analysis_records:
+            for td in team_data_list:
+                # Direct case-insensitive match
+                if td.name.lower() == record.display_team.lower():
+                    team_analysis_map.setdefault(td.name, []).append(record)
+                    break
+                # Check if any aliased source team matches the display team
+                if team_aliases:
+                    for alias_src, alias_dst in team_aliases.items():
+                        if alias_dst == td.name and alias_src.lower() == record.display_team.lower():
+                            team_analysis_map.setdefault(td.name, []).append(record)
+                            break
+
     html = template.render(
         version=version,
         branch=branch,
@@ -834,12 +857,19 @@ def render_version_report(
                 "never_executed_items": td.never_executed_items,
                 "passed_items": td.passed_items,
                 "skipped_items": td.skipped_items,
+                "team_analysis": sorted(
+                    team_analysis_map.get(td.name, []),
+                    key=lambda r: (r.bundle, r.tier),
+                ),
             }
             for td in team_data_list
         ],
         analysis_records=display_analysis,
         rp_url=rp_url.rstrip("/"),
         rp_project=rp_project,
+        gate_passed=gate_passed,
+        analysis_arch=analysis_arch,
+        analysis_max_bundles=analysis_max_bundles,
     )
 
     version_data = VersionReportData(

@@ -164,6 +164,8 @@ def generate(
                     rp_url=config.rp.base_url,
                     rp_project=config.rp.project,
                     team_aliases=config.team_aliases,
+                    analysis_arch=", ".join(config.rp.arch),
+                    analysis_max_bundles=config.rp.max_bundles,
                 )
                 version_htmls[ver_data.report_filename] = html_content
                 repo_versions[repo_config.name].append(ver_data)

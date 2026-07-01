@@ -24,7 +24,7 @@ class LaunchAnalysisRecord:
         bundle: Bundle version string.
         team: Normalized RP TEAM name.
         display_team: Collapsed display team name (from config mapping).
-        tier: ``Gating`` for gating launches, ``All`` for all launches combined.
+        tier: ``Gating`` for gating launches, ``Non-gating`` for non-gating launches only.
         arch: Architecture filter applied (or ``all``).
         launches: Number of launches aggregated.
         total: Total test executions.
@@ -87,7 +87,7 @@ def collect_analysis_stats(
 
     Groups launches by (bundle, normalized-team, tier) and sums up
     execution and defect statistics. Produces two tier rows per team:
-    ``Gating`` and ``All`` (all launches combined).
+    ``Gating`` and ``Non-gating`` (non-gating launches only).
 
     Args:
         launches: List of RP launch dicts (with attributes and statistics).
@@ -144,15 +144,6 @@ def collect_analysis_stats(
         keep_bundles = set(all_bundles[:max_bundles])
         raw_stats = {key: val for key, val in raw_stats.items() if key[0] in keep_bundles}
 
-    # Build "All" rows by summing gating + non-gating per (bundle, team)
-    all_stats: dict[tuple[str, str], dict[str, int]] = {}
-    for (bundle, team, _is_gating), counters in raw_stats.items():
-        all_key = (bundle, team)
-        if all_key not in all_stats:
-            all_stats[all_key] = _new_counters()
-        for field_name in _COUNTER_FIELDS:
-            all_stats[all_key][field_name] += counters[field_name]
-
     records: list[LaunchAnalysisRecord] = []
 
     # Add Gating rows
@@ -182,8 +173,10 @@ def collect_analysis_stats(
             )
         )
 
-    # Add All rows
-    for (bundle, team), counts in sorted(all_stats.items()):
+    # Add Non-gating rows
+    for (bundle, team, is_gating), counts in sorted(raw_stats.items()):
+        if is_gating:
+            continue
         analyzed = counts["product_bug"] + counts["automation_bug"] + counts["system_issue"] + counts["no_defect"]
         display = get_display_team(rp_team=team, team_mapping=team_mapping)
         records.append(
@@ -191,7 +184,7 @@ def collect_analysis_stats(
                 bundle=bundle,
                 team=team,
                 display_team=display,
-                tier="All",
+                tier="Non-gating",
                 arch=arch_label,
                 launches=counts["launches"],
                 total=counts["total"],
