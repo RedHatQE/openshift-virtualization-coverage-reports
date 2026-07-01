@@ -63,20 +63,20 @@ class TestCollectAnalysisStats:
     def test_basic_aggregation(self) -> None:
         launches = [
             _make_launch(launch_id=1, name="NETWORK-gating", bundle="v4.22.0-100", team="NETWORK"),
-            _make_launch(launch_id=2, name="NETWORK-nongating", bundle="v4.22.0-100", team="NETWORK"),
+            _make_launch(launch_id=2, name="NETWORK-regular", bundle="v4.22.0-100", team="NETWORK"),
         ]
         records = collect_analysis_stats(
             launches=launches,
             team_mapping=TEAM_MAPPING,
             strip_suffixes=STRIP_SUFFIXES,
         )
-        # Should have Gating + All rows for NETWORK
+        # Should have Gating + Non-gating rows for NETWORK
         gating = [rec for rec in records if rec.tier == "Gating"]
-        all_rows = [rec for rec in records if rec.tier == "All"]
+        nongating = [rec for rec in records if rec.tier == "Non-gating"]
         assert len(gating) == 1
-        assert len(all_rows) == 1
+        assert len(nongating) == 1
         assert gating[0].display_team == "Network"
-        assert all_rows[0].total == 200  # Both launches combined
+        assert nongating[0].total == 100  # Non-gating launch only
 
     def test_arch_filtering(self) -> None:
         launches = [
@@ -89,10 +89,10 @@ class TestCollectAnalysisStats:
             strip_suffixes=STRIP_SUFFIXES,
             arch_filter="amd64",
         )
-        # Only amd64 launch included
-        all_rows = [rec for rec in records if rec.tier == "All"]
-        assert len(all_rows) == 1
-        assert all_rows[0].total == 100
+        # Only amd64 launch included (gating only, no non-gating)
+        gating_rows = [rec for rec in records if rec.tier == "Gating"]
+        assert len(gating_rows) == 1
+        assert gating_rows[0].total == 100
 
     def test_max_bundles(self) -> None:
         launches = [
@@ -120,9 +120,9 @@ class TestCollectAnalysisStats:
             team_mapping=TEAM_MAPPING,
             strip_suffixes=STRIP_SUFFIXES,
         )
-        all_rows = [rec for rec in records if rec.tier == "All"]
-        assert all_rows[0].team == "NETWORK"
-        assert all_rows[0].display_team == "Network"
+        gating_rows = [rec for rec in records if rec.tier == "Gating"]
+        assert gating_rows[0].team == "NETWORK"
+        assert gating_rows[0].display_team == "Network"
 
     def test_empty_launches(self) -> None:
         records = collect_analysis_stats(
@@ -173,7 +173,7 @@ class TestAggregateByDisplayTeam:
             ),
             LaunchAnalysisRecord(
                 bundle="v4.22.0", team="NETWORK", display_team="Network",
-                tier="All", arch="amd64", launches=3, total=200,
+                tier="Non-gating", arch="amd64", launches=3, total=200,
                 passed=180, failed=15, skipped=5, analyzed=10,
                 to_investigate=5, product_bug=5, automation_bug=3,
                 system_issue=2, no_defect=0,
@@ -182,7 +182,7 @@ class TestAggregateByDisplayTeam:
         grouped = aggregate_analysis_by_display_team(records=records)
         assert len(grouped["Network"]) == 2
         tiers = {rec.tier for rec in grouped["Network"]}
-        assert tiers == {"Gating", "All"}
+        assert tiers == {"Gating", "Non-gating"}
 
     def test_preserves_arch_dimension(self) -> None:
         """Records with different arch values should not be collapsed together."""
