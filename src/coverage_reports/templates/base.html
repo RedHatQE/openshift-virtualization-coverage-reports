@@ -11,34 +11,38 @@
         h2 { margin: 1.5rem 0 0.5rem; }
         a { color: #0d6efd; text-decoration: none; }
         a:hover { text-decoration: underline; }
+
+        /* Global table defaults (matching reference) */
+        table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+        th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 0.9rem; }
+        th { background: #f0f0f0; font-weight: 600; }
+        tr:nth-child(even) { background: #f9f9f9; }
+
         .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 0.5rem; }
         .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em; }
 
         /* Summary table */
-        .summary-table { border-collapse: collapse; margin-bottom: 1rem; }
-        .summary-table td { padding: 3px 12px; }
-        .summary-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+        .summary-table { width: auto; min-width: 400px; margin-bottom: 1rem; }
+        .summary-table td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 
         /* Team summary table */
-        .team-summary-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
-        .team-summary-table th, .team-summary-table td { padding: 6px 10px; border-bottom: 1px solid #ddd; }
-        .team-summary-table th { text-align: left; background: #f5f5f5; }
+        .team-summary-table { width: 100%; margin-bottom: 1.5rem; }
         .team-summary-table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
         .team-summary-table tr.total-row { font-weight: 700; border-top: 2px solid #333; }
 
         /* Analysis table */
-        .analysis-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-        .analysis-table th, .analysis-table td { padding: 6px 10px; border-bottom: 1px solid #ddd; text-align: right; font-variant-numeric: tabular-nums; }
-        .analysis-table th { background: #f5f5f5; font-size: 0.85em; }
-        .analysis-table th:first-child, .analysis-table td:first-child { text-align: left; }
-        .analysis-table th:nth-child(2), .analysis-table td:nth-child(2) { text-align: left; }
-        .analysis-table th:nth-child(3), .analysis-table td:nth-child(3) { text-align: left; }
+        .analysis-table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; font-size: 0.85em; }
+        .analysis-table th, .analysis-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+        .analysis-table th { background: #f5f5f5; text-align: left; }
+        .analysis-table td:first-child, .analysis-table th:first-child { text-align: left; }
+        .analysis-table td:nth-child(2), .analysis-table th:nth-child(2) { text-align: left; }
         .analysis-table tr.total-row { font-weight: 700; border-top: 2px solid #333; }
         .analysis-rate-high { background: #d4edda; }
         .analysis-rate-mid { background: #fff3cd; }
         .analysis-rate-low { background: #f8d7da; }
         .analysis-rate-na { background: #e9ecef; color: #6c757d; }
-        .alt-team { background-color: #f8f9fa; }
+        .alt-team { background-color: #f8f9fa !important; }
+        .analysis-table tr:nth-child(even) { background: transparent; }
 
         /* Tabs */
         .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid #ddd; margin-bottom: 1rem; }
@@ -53,9 +57,7 @@
         summary { padding: 8px 12px; cursor: pointer; font-weight: 600; font-size: 0.95rem; border-radius: 4px; }
         summary:hover { opacity: 0.85; }
         details[open] summary { border-bottom: 1px solid #ddd; border-radius: 4px 4px 0 0; }
-        details table { width: 100%; }
-        details th, details td { padding: 4px 10px; border-bottom: 1px solid #eee; font-size: 0.85em; }
-        details th { background: #fafafa; text-align: left; }
+        details > table { table-layout: fixed; width: 100%; overflow: hidden; }
         .section-gating summary { background: #fff3cd; color: #856404; }
         .section-failed summary { background: #f8d7da; color: #721c24; }
         .section-stale summary { background: #fff3cd; color: #856404; }
@@ -82,12 +84,13 @@
         /* Legend */
         .legend { margin: 1rem 0; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
         .legend summary { cursor: pointer; font-weight: 600; }
-        .legend th { text-align: left; padding: 2px 8px; }
-        .legend table { border-collapse: collapse; }
-        .legend td { padding: 2px 8px; }
+        .legend table { border-collapse: collapse; width: auto; margin: 0; }
+        .legend th, .legend td { border: none; padding: 2px 8px; }
+        .legend th { text-align: left; background: transparent; }
+        .legend tr:nth-child(even) { background: transparent; }
 
         /* Inline matrix (reference-style) */
-        .matrix-table { border-collapse: collapse; margin: 0.5rem 0 1rem 1.5rem; }
+        .matrix-table { border-collapse: collapse; width: auto; margin: 0.5rem 0 1rem 1.5rem; }
         .matrix-table th, .matrix-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: center; }
         .matrix-table th { background: #f5f5f5; font-size: 0.85em; }
         .matrix-cell { font-size: 0.85em; min-width: 60px; padding: 4px 6px; }
@@ -108,13 +111,6 @@
         .rp-link { text-decoration: none; }
         .comment-link { margin-left: 4px; text-decoration: none; }
 
-        /* Stable column layout */
-        details > table {
-            table-layout: fixed;
-            width: 100%;
-            overflow: hidden;
-        }
-
         /* Test name column: truncate with ellipsis */
         details td.mono {
             overflow: hidden;
@@ -132,16 +128,10 @@
         }
 
         /* Param sub-table */
-        .param-table {
-            margin: 0;
-            border: none;
-            table-layout: fixed;
-            width: 100%;
-        }
-        .param-table td {
-            padding: 2px 10px;
-            border-bottom: 1px solid #f0f0f0;
-        }
+        .param-table { margin: 0; border: none; table-layout: fixed; width: 100%; }
+        .param-table td { padding: 2px 10px; border: none; border-bottom: 1px solid #f0f0f0; }
+        .param-table th { display: none; }
+        .param-table tr:nth-child(even) { background: transparent; }
 
         /* Group row */
         .group-row td {
